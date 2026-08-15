@@ -1,0 +1,2121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MARS JARVIS — Phase I</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+/* ============================================================
+   MARS JARVIS — DESIGN TOKENS
+   Signature element: the ARC CORE — a rotating radial HUD ring
+   on Home that doubles as the live voice-activity visualizer.
+   ============================================================ */
+:root{
+  --void:        #05080d;
+  --void-2:      #070d14;
+  --panel:       rgba(14, 24, 36, 0.55);
+  --panel-solid: #0b1620;
+  --hairline:    rgba(120, 200, 255, 0.16);
+  --hairline-2:  rgba(120, 200, 255, 0.08);
+  --cyan:        #4fd8ff;
+  --cyan-dim:    rgba(79, 216, 255, 0.35);
+  --amber:       #ffb454;
+  --violet:      #7c5cff;
+  --red:         #ff5470;
+  --green:       #48f2b0;
+  --text-hi:     #eaf6fd;
+  --text-mid:    #9db3c2;
+  --text-dim:    #5c7383;
+  --font-display: 'Orbitron', sans-serif;
+  --font-body: 'Rajdhani', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius: 14px;
+  --sidebar-w: 240px;
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+html,body{ height:100%; }
+body{
+  background: radial-gradient(ellipse 120% 80% at 50% -10%, #0d1e2c 0%, var(--void) 45%, var(--void-2) 100%);
+  color: var(--text-hi);
+  font-family: var(--font-body);
+  font-weight: 500;
+  min-height:100vh;
+  overflow-x:hidden;
+  position:relative;
+}
+::selection{ background: var(--cyan-dim); color:#fff; }
+::-webkit-scrollbar{ width:8px; height:8px; }
+::-webkit-scrollbar-thumb{ background: var(--hairline); border-radius:8px; }
+::-webkit-scrollbar-track{ background:transparent; }
+
+/* ambient scanline / grid atmosphere */
+body::before{
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image:
+    linear-gradient(rgba(79,216,255,0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79,216,255,0.035) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 20%, black, transparent 75%);
+}
+body::after{
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:0.5;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, transparent 1px, transparent 2px);
+}
+:focus-visible{ outline: 2px solid var(--cyan); outline-offset:2px; border-radius:4px; }
+@media (prefers-reduced-motion: reduce){ *{ animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; } }
+
+button{ font-family:inherit; cursor:pointer; }
+input, select, textarea{ font-family:inherit; color:var(--text-hi); }
+
+/* ============================================================
+   LAYOUT SHELL
+   ============================================================ */
+.shell{ display:flex; min-height:100vh; position:relative; z-index:1; }
+
+/* ---------- Sidebar ---------- */
+.sidebar{
+  width: var(--sidebar-w); flex-shrink:0;
+  background: linear-gradient(180deg, rgba(9,17,26,0.8), rgba(6,12,19,0.9));
+  border-right: 1px solid var(--hairline-2);
+  backdrop-filter: blur(18px);
+  display:flex; flex-direction:column;
+  position:fixed; top:0; bottom:0; left:0; z-index:40;
+  transition: transform 0.35s cubic-bezier(.4,0,.2,1);
+}
+.brand{
+  padding: 26px 22px 20px; display:flex; align-items:center; gap:12px;
+  border-bottom:1px solid var(--hairline-2);
+}
+.brand-mark{
+  width:34px; height:34px; border-radius:50%;
+  border:2px solid var(--cyan); position:relative; flex-shrink:0;
+  box-shadow: 0 0 14px var(--cyan-dim), inset 0 0 8px var(--cyan-dim);
+  animation: brand-spin 6s linear infinite;
+}
+.brand-mark::before{
+  content:''; position:absolute; inset:6px; border-radius:50%;
+  border:1px solid var(--cyan); opacity:0.6;
+}
+@keyframes brand-spin{ to{ transform:rotate(360deg);} }
+.brand-text{ line-height:1.15; }
+.brand-text b{ font-family:var(--font-display); font-size:15px; letter-spacing:1.5px; color:var(--text-hi); display:block; }
+.brand-text span{ font-family:var(--font-mono); font-size:9.5px; letter-spacing:2px; color:var(--cyan); text-transform:uppercase; }
+
+.nav{ flex:1; padding:18px 12px; display:flex; flex-direction:column; gap:4px; }
+.nav-item{
+  display:flex; align-items:center; gap:12px; padding:11px 14px;
+  border-radius:10px; color:var(--text-mid); text-decoration:none;
+  font-size:14.5px; font-weight:600; letter-spacing:0.3px;
+  border:1px solid transparent; background:none; width:100%; text-align:left;
+  transition: all 0.18s ease; position:relative;
+}
+.nav-item svg{ width:18px; height:18px; flex-shrink:0; opacity:0.85; }
+.nav-item:hover{ color:var(--text-hi); background:rgba(79,216,255,0.06); border-color:var(--hairline-2); }
+.nav-item.active{
+  color:var(--cyan); background:rgba(79,216,255,0.09);
+  border-color:var(--hairline); box-shadow: inset 0 0 0 1px rgba(79,216,255,0.05);
+}
+.nav-item.active::before{
+  content:''; position:absolute; left:-12px; top:50%; translate:0 -50%;
+  width:3px; height:60%; background:var(--cyan); border-radius:2px;
+  box-shadow: 0 0 8px var(--cyan);
+}
+.nav-tag{
+  margin-left:auto; font-family:var(--font-mono); font-size:9px; color:var(--text-dim);
+  border:1px solid var(--hairline-2); padding:1px 5px; border-radius:4px;
+}
+
+.sidebar-foot{ padding:16px; border-top:1px solid var(--hairline-2); }
+.sync-pill{
+  display:flex; align-items:center; gap:8px; font-family:var(--font-mono);
+  font-size:10.5px; color:var(--text-dim); padding:8px 10px;
+  border:1px solid var(--hairline-2); border-radius:8px;
+}
+.dot{ width:7px; height:7px; border-radius:50%; background:var(--text-dim); flex-shrink:0; }
+.dot.on{ background:var(--green); box-shadow:0 0 8px var(--green); }
+.dot.off{ background:var(--red); box-shadow:0 0 8px var(--red); }
+
+/* ---------- Main ---------- */
+.main{ margin-left: var(--sidebar-w); flex:1; min-width:0; display:flex; flex-direction:column; min-height:100vh; }
+
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 32px; border-bottom:1px solid var(--hairline-2);
+  background: rgba(6,12,19,0.55); backdrop-filter: blur(14px);
+  position:sticky; top:0; z-index:30;
+}
+.topbar-left{ display:flex; align-items:center; gap:14px; }
+.menu-btn{ display:none; background:none; border:1px solid var(--hairline-2); color:var(--text-hi); border-radius:8px; padding:8px; }
+.page-eyebrow{ font-family:var(--font-mono); font-size:10px; letter-spacing:3px; color:var(--cyan); text-transform:uppercase; }
+.page-title{ font-family:var(--font-display); font-size:18px; letter-spacing:1px; }
+.topbar-right{ display:flex; align-items:center; gap:18px; }
+.clock{ font-family:var(--font-mono); font-size:13px; color:var(--text-mid); letter-spacing:1px; }
+.mic-indicator{
+  display:flex; align-items:center; gap:7px; font-family:var(--font-mono); font-size:10.5px;
+  color:var(--text-dim); border:1px solid var(--hairline-2); padding:6px 11px; border-radius:20px;
+}
+.mic-indicator.listening{ color:var(--green); border-color:rgba(72,242,176,0.35); }
+.mic-indicator .dot{ animation:none; }
+.mic-indicator.listening .dot{ background:var(--green); box-shadow:0 0 8px var(--green); animation:pulse-dot 1.2s ease-in-out infinite; }
+@keyframes pulse-dot{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+
+.gsi-slot{ display:flex; align-items:center; gap:10px; }
+.user-chip{
+  display:flex; align-items:center; gap:8px; padding:5px 12px 5px 5px;
+  border:1px solid var(--hairline-2); border-radius:20px; font-size:12.5px; color:var(--text-mid);
+}
+.user-chip img{ width:24px; height:24px; border-radius:50%; }
+
+.content{ padding:28px 32px 60px; flex:1; }
+.section{ display:none; animation: rise 0.4s ease; }
+.section.active{ display:block; }
+@keyframes rise{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+
+/* ============================================================
+   GLASS PANELS / SHARED
+   ============================================================ */
+.panel{
+  background: var(--panel); border:1px solid var(--hairline-2);
+  border-radius: var(--radius); backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+  position:relative; overflow:hidden;
+}
+.panel::before{
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background: linear-gradient(90deg, transparent, var(--cyan-dim), transparent);
+}
+.panel-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--hairline-2); }
+.panel-head h3{ font-family:var(--font-display); font-size:12.5px; letter-spacing:2px; text-transform:uppercase; color:var(--text-mid); font-weight:700; }
+.panel-body{ padding:20px; }
+
+.btn{
+  display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:13px;
+  letter-spacing:0.5px; padding:10px 18px; border-radius:9px; border:1px solid var(--hairline);
+  background: rgba(79,216,255,0.08); color:var(--cyan); transition: all 0.18s ease;
+}
+.btn:hover{ background:rgba(79,216,255,0.16); box-shadow:0 0 16px rgba(79,216,255,0.18); transform:translateY(-1px); }
+.btn:active{ transform:translateY(0); }
+.btn.ghost{ background:transparent; color:var(--text-mid); border-color:var(--hairline-2); }
+.btn.ghost:hover{ color:var(--text-hi); background:rgba(255,255,255,0.03); }
+.btn.danger{ color:var(--red); border-color:rgba(255,84,112,0.3); background:rgba(255,84,112,0.06); }
+.btn.danger:hover{ background:rgba(255,84,112,0.14); }
+.btn.small{ padding:6px 12px; font-size:11.5px; }
+.btn:disabled{ opacity:0.4; cursor:not-allowed; transform:none; box-shadow:none; }
+
+.field{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+.field label{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:1.5px; color:var(--text-dim); text-transform:uppercase; }
+.field input, .field select, .field textarea{
+  background: rgba(255,255,255,0.03); border:1px solid var(--hairline-2); border-radius:8px;
+  padding:10px 12px; font-size:14px; color:var(--text-hi);
+}
+.field input:focus, .field select:focus, .field textarea:focus{ border-color:var(--cyan-dim); background:rgba(255,255,255,0.05); }
+.field textarea{ resize:vertical; min-height:70px; }
+
+.badge{ font-family:var(--font-mono); font-size:9.5px; letter-spacing:1px; padding:2px 8px; border-radius:10px; border:1px solid var(--hairline-2); color:var(--text-dim); text-transform:uppercase; }
+.badge.high{ color:var(--red); border-color:rgba(255,84,112,0.35); }
+.badge.medium{ color:var(--amber); border-color:rgba(255,180,84,0.35); }
+.badge.low{ color:var(--green); border-color:rgba(72,242,176,0.35); }
+
+.empty-state{ text-align:center; padding:40px 20px; color:var(--text-dim); }
+.empty-state .em-icon{ font-size:26px; margin-bottom:10px; opacity:0.5; }
+.empty-state p{ font-size:13px; font-family:var(--font-mono); letter-spacing:0.5px; }
+
+.toast-wrap{ position:fixed; bottom:24px; right:24px; z-index:200; display:flex; flex-direction:column; gap:10px; }
+.pending-link-bar{
+  position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:210;
+  display:flex; align-items:center; gap:14px; padding:10px 14px 10px 18px;
+  background: rgba(11,22,32,0.95); border:1px solid var(--cyan-dim); border-radius:30px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 20px var(--cyan-dim);
+  font-size:13px; color:var(--text-hi); backdrop-filter: blur(10px);
+  animation: toast-in 0.3s ease;
+}
+.pending-link-bar b{ color:var(--cyan); }
+@media (max-width:600px){ .pending-link-bar{ left:12px; right:12px; transform:none; flex-wrap:wrap; } }
+.toast{
+  font-family:var(--font-mono); font-size:12.5px; padding:12px 16px; border-radius:9px;
+  background: rgba(11,22,32,0.92); border:1px solid var(--hairline); color:var(--text-hi);
+  box-shadow:0 10px 30px rgba(0,0,0,0.4); min-width:220px; animation: toast-in 0.3s ease;
+  border-left:3px solid var(--cyan);
+}
+.toast.error{ border-left-color:var(--red); }
+.toast.success{ border-left-color:var(--green); }
+@keyframes toast-in{ from{opacity:0; transform:translateX(20px);} to{opacity:1; transform:translateX(0);} }
+
+/* ============================================================
+   HOME — ARC CORE (signature element)
+   ============================================================ */
+.home-grid{ display:grid; grid-template-columns: 1.1fr 1fr; gap:22px; }
+@media (max-width:1000px){ .home-grid{ grid-template-columns:1fr; } }
+
+.core-panel{ display:flex; flex-direction:column; align-items:center; justify-content:center; padding:36px 20px 30px; }
+.core-stage{ position:relative; width:260px; height:260px; display:flex; align-items:center; justify-content:center; }
+.core-ring{ position:absolute; border-radius:50%; border:1px solid var(--hairline); }
+.core-ring.r1{ inset:0; animation: spin-cw 18s linear infinite; border-style:dashed; opacity:0.5; }
+.core-ring.r2{ inset:22px; animation: spin-ccw 12s linear infinite; opacity:0.7; }
+.core-ring.r3{ inset:44px; border-color: var(--cyan-dim); }
+@keyframes spin-cw{ to{ transform:rotate(360deg); } }
+@keyframes spin-ccw{ to{ transform:rotate(-360deg); } }
+.core-center{
+  width:132px; height:132px; border-radius:50%;
+  background: radial-gradient(circle at 40% 35%, rgba(79,216,255,0.35), rgba(79,216,255,0.04) 65%);
+  border:2px solid var(--cyan); display:flex; align-items:center; justify-content:center;
+  box-shadow: 0 0 40px var(--cyan-dim), inset 0 0 30px rgba(79,216,255,0.15);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.core-center.listening{ border-color:var(--green); box-shadow:0 0 50px rgba(72,242,176,0.45), inset 0 0 30px rgba(72,242,176,0.2); animation: core-breathe 1.4s ease-in-out infinite; }
+@keyframes core-breathe{ 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.05);} }
+.core-status{ font-family:var(--font-display); font-size:11px; letter-spacing:2px; color:var(--text-hi); text-align:center; }
+.core-status small{ display:block; font-family:var(--font-mono); font-size:9px; color:var(--cyan); letter-spacing:1.5px; margin-top:4px; }
+.core-bars{ position:absolute; inset:0; }
+.core-bars i{
+  position:absolute; left:50%; top:50%; width:2px; height:8px; background:var(--cyan);
+  transform-origin: 0 -70px; opacity:0.35; border-radius:2px; transition: height 0.12s ease, opacity 0.2s ease;
+}
+.core-caption{ margin-top:22px; text-align:center; }
+.core-caption b{ font-family:var(--font-display); font-size:13px; letter-spacing:1px; display:block; }
+.core-caption span{ font-family:var(--font-mono); font-size:11px; color:var(--text-dim); }
+.wake-hint{ margin-top:16px; font-family:var(--font-mono); font-size:10.5px; color:var(--text-dim); text-align:center; padding:8px 14px; border:1px dashed var(--hairline-2); border-radius:8px; }
+.wake-hint b{ color:var(--cyan); }
+
+.home-side{ display:flex; flex-direction:column; gap:18px; }
+.stat-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+.stat-card{ padding:16px; }
+.stat-card .num{ font-family:var(--font-display); font-size:26px; color:var(--cyan); }
+.stat-card .lbl{ font-family:var(--font-mono); font-size:9.5px; letter-spacing:1.5px; color:var(--text-dim); text-transform:uppercase; margin-top:4px; }
+
+.feed-list{ display:flex; flex-direction:column; max-height:320px; overflow-y:auto; }
+.feed-item{ display:flex; gap:12px; padding:12px 20px; border-bottom:1px solid var(--hairline-2); font-size:13px; }
+.feed-item:last-child{ border-bottom:none; }
+.feed-item .ts{ font-family:var(--font-mono); font-size:10px; color:var(--text-dim); white-space:nowrap; padding-top:2px; }
+.feed-item .tx{ color:var(--text-mid); }
+.feed-item .tx b{ color:var(--text-hi); font-weight:600; }
+
+/* ============================================================
+   MEMORY / NOTES
+   ============================================================ */
+.toolbar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:18px; }
+.toolbar .search{ flex:1; min-width:180px; }
+.toolbar .search input{ width:100%; }
+
+.card-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:16px; }
+.note-card{ padding:16px; display:flex; flex-direction:column; gap:10px; }
+.note-card .note-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+.note-card .note-text{ font-size:14px; color:var(--text-mid); line-height:1.5; white-space:pre-wrap; word-break:break-word; }
+.note-card .note-foot{ display:flex; justify-content:space-between; align-items:center; margin-top:auto; padding-top:8px; border-top:1px solid var(--hairline-2); }
+.note-meta{ font-family:var(--font-mono); font-size:10px; color:var(--text-dim); }
+.icon-btn{ background:none; border:none; color:var(--text-dim); padding:4px; border-radius:6px; display:flex; }
+.icon-btn:hover{ color:var(--cyan); background:rgba(79,216,255,0.08); }
+.icon-btn.del:hover{ color:var(--red); background:rgba(255,84,112,0.08); }
+.icon-btn svg{ width:15px; height:15px; }
+
+/* ============================================================
+   TASKS
+   ============================================================ */
+.task-list{ display:flex; flex-direction:column; gap:10px; }
+.task-row{ display:flex; align-items:center; gap:14px; padding:14px 16px; }
+.task-check{ width:20px; height:20px; border-radius:6px; border:1.5px solid var(--hairline); flex-shrink:0; display:flex; align-items:center; justify-content:center; background:none; }
+.task-check svg{ width:12px; height:12px; opacity:0; }
+.task-row.done .task-check{ background:var(--green); border-color:var(--green); }
+.task-row.done .task-check svg{ opacity:1; color:#04140c; }
+.task-row.done .task-text{ text-decoration:line-through; color:var(--text-dim); }
+.task-text{ flex:1; font-size:14px; }
+.task-actions{ display:flex; gap:4px; align-items:center; }
+
+/* ============================================================
+   VOICE CONSOLE
+   ============================================================ */
+.voice-grid{ display:grid; grid-template-columns:1fr 340px; gap:22px; align-items:start; }
+@media (max-width:1000px){ .voice-grid{ grid-template-columns:1fr; } }
+.console-log{ height:420px; overflow-y:auto; padding:18px 20px; display:flex; flex-direction:column; gap:12px; font-family:var(--font-mono); font-size:12.5px; }
+.log-line{ display:flex; gap:10px; }
+.log-line .ts{ color:var(--text-dim); flex-shrink:0; }
+.log-line.user .who{ color:var(--amber); }
+.log-line.jarvis .who{ color:var(--cyan); }
+.log-line .who{ font-weight:700; }
+.log-line .msg{ color:var(--text-mid); }
+
+.voice-controls{ display:flex; flex-direction:column; gap:14px; }
+.big-mic{
+  width:100%; padding:20px; border-radius:14px; display:flex; flex-direction:column; align-items:center; gap:8px;
+  background: rgba(79,216,255,0.06); border:1px solid var(--hairline);
+}
+.big-mic-btn{
+  width:74px; height:74px; border-radius:50%; border:2px solid var(--cyan); background:rgba(79,216,255,0.08);
+  color:var(--cyan); display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;
+}
+.big-mic-btn svg{ width:28px; height:28px; }
+.big-mic-btn:hover{ box-shadow:0 0 22px var(--cyan-dim); }
+.big-mic-btn.active{ background:var(--green); border-color:var(--green); color:#04140c; box-shadow:0 0 26px rgba(72,242,176,0.5); animation:core-breathe 1.2s ease-in-out infinite; }
+.big-mic-label{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:1.5px; color:var(--text-dim); }
+.toggle-row{ display:flex; align-items:center; justify-content:space-between; padding:12px 14px; }
+.switch{ width:38px; height:22px; border-radius:20px; background:rgba(255,255,255,0.08); border:1px solid var(--hairline-2); position:relative; flex-shrink:0; }
+.switch::after{ content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:var(--text-dim); transition:all 0.2s ease; }
+.switch.on{ background:rgba(79,216,255,0.25); border-color:var(--cyan-dim); }
+.switch.on::after{ left:18px; background:var(--cyan); box-shadow:0 0 8px var(--cyan); }
+
+/* ============================================================
+   SETTINGS
+   ============================================================ */
+.settings-grid{ display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+@media (max-width:900px){ .settings-grid{ grid-template-columns:1fr; } }
+.setup-steps{ display:flex; flex-direction:column; gap:14px; }
+.setup-step{ display:flex; gap:12px; }
+.setup-step .n{ font-family:var(--font-display); font-size:12px; color:var(--cyan); border:1px solid var(--hairline); border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.setup-step p{ font-size:13px; color:var(--text-mid); line-height:1.5; }
+.setup-step a{ color:var(--cyan); }
+.status-line{ display:flex; align-items:center; justify-content:space-between; padding:11px 0; border-bottom:1px solid var(--hairline-2); font-size:13px; color:var(--text-mid); }
+.status-line:last-child{ border-bottom:none; }
+.status-val{ font-family:var(--font-mono); font-size:11.5px; }
+.status-val.ok{ color:var(--green); }
+.status-val.bad{ color:var(--red); }
+
+.overlay-scrim{ position:fixed; inset:0; background:rgba(3,6,10,0.6); backdrop-filter: blur(3px); z-index:39; display:none; }
+@media (max-width: 880px){
+  .sidebar{ transform:translateX(-100%); }
+  .sidebar.open{ transform:translateX(0); }
+  .main{ margin-left:0; }
+  .menu-btn{ display:flex; }
+  .overlay-scrim.show{ display:block; }
+  .content{ padding:22px 16px 50px; }
+  .home-grid, .voice-grid, .settings-grid{ grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div class="brand-text"><b>MARS JARVIS</b><span>Phase I · Foundation</span></div>
+    </div>
+    <nav class="nav">
+      <button class="nav-item active" data-section="home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9h14v-9"/></svg>
+        Home
+      </button>
+      <button class="nav-item" data-section="memory">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19.5V6a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v13.5"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H19"/></svg>
+        Memory
+        <span class="nav-tag" id="tag-notes">0</span>
+      </button>
+      <button class="nav-item" data-section="tasks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Tasks
+        <span class="nav-tag" id="tag-tasks">0</span>
+      </button>
+      <button class="nav-item" data-section="voice">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 19v3"/></svg>
+        Voice Console
+      </button>
+      <button class="nav-item" data-section="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        Settings
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="sync-pill" id="syncPill"><span class="dot off" id="syncDot"></span><span id="syncText">DRIVE · DISCONNECTED</span></div>
+    </div>
+  </aside>
+  <div class="overlay-scrim" id="scrim"></div>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="menu-btn" id="menuBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        </button>
+        <div>
+          <div class="page-eyebrow" id="pageEyebrow">SYSTEM · ONLINE</div>
+          <div class="page-title" id="pageTitle">Home</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="mic-indicator" id="topMicIndicator"><span class="dot off"></span><span id="topMicText">MIC IDLE</span></div>
+        <div class="clock" id="clock">--:--:--</div>
+        <div class="gsi-slot" id="gsiSlot">
+          <div id="gsiButtonHolder"></div>
+        </div>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ================= HOME ================= -->
+      <section class="section active" id="sec-home">
+        <div class="home-grid">
+          <div class="panel core-panel">
+            <div class="core-stage">
+              <div class="core-ring r1"></div>
+              <div class="core-ring r2"></div>
+              <div class="core-ring r3"></div>
+              <div class="core-bars" id="coreBars"></div>
+              <div class="core-center" id="coreCenter">
+                <div class="core-status" id="coreStatus">STANDBY<small id="coreStatusSub">SAY "JARVIS"</small></div>
+              </div>
+            </div>
+            <div class="core-caption"><b>ARC CORE</b><span id="coreCaption">Idle · awaiting wake word</span></div>
+            <div class="wake-hint">Wake word: <b>"Jarvis"</b> — then speak a command, e.g. <b>"Jarvis, note blockchain idea"</b></div>
+          </div>
+
+          <div class="home-side">
+            <div class="panel">
+              <div class="panel-head"><h3>System Status</h3></div>
+              <div class="panel-body" style="padding-top:14px; padding-bottom:14px;">
+                <div class="status-line"><span>System</span><span class="status-val ok" id="statSystem">ONLINE</span></div>
+                <div class="status-line"><span>Microphone</span><span class="status-val" id="statMic">MUTED</span></div>
+                <div class="status-line"><span>Google</span><span class="status-val" id="statGoogle">DISCONNECTED</span></div>
+                <div class="status-line"><span>Voice</span><span class="status-val" id="statVoice">IDLE</span></div>
+              </div>
+            </div>
+            <div class="stat-row">
+              <div class="panel stat-card"><div class="num" id="statNotes">0</div><div class="lbl">Notes</div></div>
+              <div class="panel stat-card"><div class="num" id="statTasks">0</div><div class="lbl">Open Tasks</div></div>
+              <div class="panel stat-card"><div class="num" id="statCmds">0</div><div class="lbl">Commands</div></div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h3>Recent Activity</h3><button class="btn ghost small" data-nav="voice">Open Console</button></div>
+              <div class="feed-list" id="activityFeed">
+                <div class="empty-state"><div class="em-icon">◌</div><p>No activity yet. Sign in and speak to Jarvis to begin.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= MEMORY / NOTES ================= -->
+      <section class="section" id="sec-memory">
+        <div class="panel">
+          <div class="panel-head"><h3>New Note</h3></div>
+          <div class="panel-body">
+            <div class="field"><textarea id="noteInput" placeholder="Type a note, or say &quot;Jarvis, note...&quot;"></textarea></div>
+            <button class="btn" id="addNoteBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+              Save Note
+            </button>
+          </div>
+        </div>
+
+        <div style="height:20px"></div>
+
+        <div class="toolbar">
+          <div class="search"><input id="noteSearch" placeholder="Search notes…"></div>
+          <span class="badge" id="noteCountBadge">0 notes</span>
+        </div>
+        <div class="card-grid" id="notesGrid"></div>
+      </section>
+
+      <!-- ================= TASKS ================= -->
+      <section class="section" id="sec-tasks">
+        <div class="panel">
+          <div class="panel-head"><h3>New Task</h3></div>
+          <div class="panel-body">
+            <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+              <div class="field" style="flex:2; min-width:200px; margin-bottom:0;"><label>Task</label><input id="taskInput" placeholder="e.g. Draft blockchain proposal"></div>
+              <div class="field" style="flex:1; min-width:130px; margin-bottom:0;"><label>Priority</label>
+                <select id="taskPriority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select>
+              </div>
+              <button class="btn" id="addTaskBtn" style="height:41px;">Add Task</button>
+            </div>
+          </div>
+        </div>
+        <div style="height:20px"></div>
+        <div class="toolbar">
+          <span class="badge" id="taskCountBadge">0 open</span>
+        </div>
+        <div class="task-list" id="taskList"></div>
+      </section>
+
+      <!-- ================= VOICE CONSOLE ================= -->
+      <section class="section" id="sec-voice">
+        <div class="voice-grid">
+          <div class="panel">
+            <div class="panel-head"><h3>Command Log</h3><button class="btn ghost small" id="clearLogBtn">Clear</button></div>
+            <div class="console-log" id="consoleLog">
+              <div class="log-line jarvis"><span class="ts">--:--:--</span><span class="who">JARVIS</span><span class="msg">Voice console ready. Enable the microphone to begin.</span></div>
+            </div>
+            <div class="panel-body" style="border-top:1px solid var(--hairline-2); display:flex; gap:10px;">
+              <input id="typedCommand" placeholder="Type a command instead of speaking… (e.g. jarvis add task call bank)" style="flex:1; background:rgba(255,255,255,0.03); border:1px solid var(--hairline-2); border-radius:8px; padding:10px 12px; color:var(--text-hi);">
+              <button class="btn" id="sendTypedBtn">Send</button>
+            </div>
+          </div>
+
+          <div class="voice-controls">
+            <div class="big-mic">
+              <button class="big-mic-btn" id="pushToTalkBtn" title="Push to talk">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 19v3"/></svg>
+              </button>
+              <div class="big-mic-label" id="pushToTalkLabel">PUSH TO TALK</div>
+            </div>
+            <button class="btn ghost" id="stopSpeakingBtn" style="width:100%; justify-content:center;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+              Stop Speaking
+            </button>
+            <div class="panel">
+              <div class="toggle-row">
+                <span style="font-size:13px;">Continuous listening</span>
+                <button class="switch" id="continuousToggle"></button>
+              </div>
+              <div class="toggle-row">
+                <span style="font-size:13px;">Mute spoken responses</span>
+                <button class="switch" id="muteToggle"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SETTINGS ================= -->
+      <section class="section" id="sec-settings">
+        <div class="settings-grid">
+          <div class="panel">
+            <div class="panel-head"><h3>Google Drive Connection</h3></div>
+            <div class="panel-body">
+              <div class="field">
+                <label>OAuth Client ID</label>
+                <input id="clientIdInput" placeholder="xxxxxxxxxx.apps.googleusercontent.com">
+              </div>
+              <div class="field">
+                <label>API Key</label>
+                <input id="apiKeyInput" placeholder="AIza...">
+              </div>
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn" id="saveCredsBtn">Save Credentials</button>
+                <button class="btn ghost" id="signInBtn">Sign in with Google</button>
+                <button class="btn danger" id="signOutBtn">Sign out</button>
+              </div>
+              <div style="height:18px"></div>
+              <div class="status-line"><span>Google Identity Services</span><span class="status-val" id="gisStatus">loading…</span></div>
+              <div class="status-line"><span>Drive access</span><span class="status-val" id="driveStatus">not authorized</span></div>
+              <div class="status-line"><span>MARS_JARVIS_DATA.json</span><span class="status-val" id="fileStatus">not found</span></div>
+              <div class="status-line"><span>Speech Recognition API</span><span class="status-val" id="sttStatus">checking…</span></div>
+              <div class="status-line"><span>Speech Synthesis API</span><span class="status-val" id="ttsStatus">checking…</span></div>
+              <div style="height:14px"></div>
+              <button class="btn ghost" id="forceSaveBtn">Force Save to Drive</button>
+              <button class="btn ghost" id="forceLoadBtn">Reload from Drive</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h3>Setup Guide</h3></div>
+            <div class="panel-body setup-steps">
+              <div class="setup-step"><div class="n">1</div><p>Open the <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a>, create a project, and enable the <b>Google Drive API</b>.</p></div>
+              <div class="setup-step"><div class="n">2</div><p>Create an <b>OAuth 2.0 Client ID</b> (Web application). Add the exact URL this page is hosted at to Authorized JavaScript origins.</p></div>
+              <div class="setup-step"><div class="n">3</div><p>Create an <b>API key</b> and restrict it to the Drive API.</p></div>
+              <div class="setup-step"><div class="n">4</div><p>Paste both values here, click <b>Save Credentials</b>, then <b>Sign in with Google</b>. Jarvis requests the narrow <code>drive.file</code> scope — it can only see files it creates.</p></div>
+              <div class="setup-step"><div class="n">5</div><p>Jarvis will create <b>MARS_JARVIS_DATA.json</b> in your Drive on first sign-in and keep it in sync as your single source of truth. No servers, no databases — everything lives in your Drive.</p></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:22px"></div>
+
+        <div class="settings-grid">
+          <div class="panel">
+            <div class="panel-head"><h3>Voice &amp; Speech</h3></div>
+            <div class="panel-body">
+              <div class="field">
+                <label>Idioma (reconhecimento e voz)</label>
+                <select id="languageSelect">
+                  <option value="pt-BR">Português (Brasil)</option>
+                  <option value="pt-PT">Português (Portugal)</option>
+                  <option value="en-US">English (US)</option>
+                  <option value="en-GB">English (UK)</option>
+                  <option value="es-ES">Español</option>
+                  <option value="fr-FR">Français</option>
+                  <option value="de-DE">Deutsch</option>
+                  <option value="it-IT">Italiano</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Wake word</label>
+                <input id="wakeWordInput" placeholder="jarvis">
+              </div>
+              <div class="toggle-row" style="padding:8px 0;">
+                <span style="font-size:13px;">Require wake word</span>
+                <button class="switch" id="wakeWordToggle"></button>
+              </div>
+              <div class="field" style="margin-top:10px;">
+                <label>Voice</label>
+                <select id="voiceSelect"><option>System default</option></select>
+              </div>
+              <div class="field">
+                <label>Speech rate — <span id="rateVal">1.0</span></label>
+                <input id="rateInput" type="range" min="0.5" max="2" step="0.1" value="1">
+              </div>
+              <div class="field" style="margin-bottom:0;">
+                <label>Speech pitch — <span id="pitchVal">1.0</span></label>
+                <input id="pitchInput" type="range" min="0" max="2" step="0.1" value="1">
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h3>Microphone</h3></div>
+            <div class="panel-body">
+              <div class="field">
+                <label>Input device</label>
+                <select id="micSelect"><option value="">Browser default</option></select>
+              </div>
+              <p style="font-size:11.5px; color:var(--text-dim); line-height:1.6;">
+                ⚠ Browser limitation: the Web Speech Recognition API does not let a page choose which microphone it listens to — it always uses the device your operating system or browser has set as default. This list is informational; to actually switch mics, change the default input in your OS sound settings or your browser's site permissions.
+              </p>
+              <div style="height:6px"></div>
+              <button class="btn ghost" id="refreshMicsBtn">Refresh Device List</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:22px"></div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Limitações reais do navegador</h3></div>
+          <div class="panel-body">
+            <p style="font-size:12px; color:var(--text-mid); line-height:1.7;">
+              ⚠ <b>Segundo plano:</b> uma aba do navegador não recebe áudio do microfone quando você troca de app ou minimiza a janela — isso é bloqueado pelo sistema, não é algo que uma página web possa contornar. Mantenha esta aba em foco para o Jarvis continuar ouvindo.<br><br>
+              ⚠ <b>Abrir apps (Discord, Roblox, Spotify, Steam):</b> um navegador nunca pode executar um programa diretamente. O que o Jarvis faz é chamar o "protocolo" do app (ex: <code>discord://</code>) — se o app estiver instalado, o sistema operacional abre uma confirmação; se não estiver, ou o navegador bloquear, o Jarvis abre a versão web como alternativa.
+            </p>
+          </div>
+        </div>
+
+        <div style="height:22px"></div>
+
+        <div class="settings-grid">
+          <div class="panel">
+            <div class="panel-head"><h3>Identidade</h3></div>
+            <div class="panel-body">
+              <div class="field" style="margin-bottom:0;">
+                <label>Nome do assistente</label>
+                <input id="assistantNameInput" placeholder="Jarvis">
+              </div>
+              <p style="font-size:11.5px; color:var(--text-dim); line-height:1.6; margin-top:10px;">
+                Esse nome aparece no console e é usado pela IA quando ela se refere a si mesma. Se quiser que a palavra de ativação também mude, edite o campo "Wake word" acima.
+              </p>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h3>Fechar Abas</h3></div>
+            <div class="panel-body">
+              <p style="font-size:12px; color:var(--text-mid); line-height:1.6;">
+                Diga <b>"Jarvis, fechar aba"</b> para fechar a última aba que ele abriu, ou <b>"Jarvis, fechar YouTube"</b> / <b>"fechar Google"</b> para fechar uma aba específica pelo nome. Se houver mais de uma do mesmo site, use um número: <b>"fechar Google 2"</b>.
+              </p>
+              <p style="font-size:11.5px; color:var(--text-dim); line-height:1.6; margin-top:10px;">
+                ⚠ Só funciona para abas que o <b>próprio Jarvis abriu</b> — por segurança do navegador, nenhum site (nem este) pode listar ou fechar abas arbitrárias, nem fechar programas como Discord ou Roblox depois que eles já abriram fora do navegador.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:22px"></div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Atalhos de Música</h3></div>
+          <div class="panel-body">
+            <p style="font-size:12.5px; color:var(--text-mid); line-height:1.6; margin-bottom:14px;">
+              Configure suas próprias músicas, playlists ou vídeos: diga o gatilho e o Jarvis toca exatamente o que você configurou no YouTube.
+            </p>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px;">
+              <div class="field" style="flex:1; min-width:160px; margin-bottom:0;"><label>Quando eu disser "toque..."</label><input id="musicTrigger" placeholder="ex: minha playlist de estudos"></div>
+              <div class="field" style="flex:1.4; min-width:200px; margin-bottom:0;"><label>Busca ou link do YouTube</label><input id="musicValue" placeholder="lofi hip hop para estudar, ou https://youtube.com/..."></div>
+              <button class="btn" id="addMusicShortcutBtn" style="height:41px;">Salvar</button>
+            </div>
+            <div id="musicShortcutList" class="task-list"></div>
+          </div>
+        </div>
+
+        <div style="height:22px"></div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Personalizar Comandos</h3></div>
+          <div class="panel-body">
+            <p style="font-size:12.5px; color:var(--text-mid); line-height:1.6; margin-bottom:14px;">
+              Crie seus próprios comandos de voz: uma frase-gatilho e o que o Jarvis deve fazer quando ouvir algo parecido com ela.
+            </p>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px;">
+              <div class="field" style="flex:1; min-width:160px; margin-bottom:0;"><label>Quando eu disser</label><input id="customTrigger" placeholder="ex: modo foco"></div>
+              <div class="field" style="flex:1; min-width:160px; margin-bottom:0;"><label>Ação</label>
+                <select id="customActionType">
+                  <option value="open_url">Abrir um site</option>
+                  <option value="open_app">Abrir um app (protocolo)</option>
+                  <option value="say">Só responder algo</option>
+                </select>
+              </div>
+              <div class="field" style="flex:1; min-width:160px; margin-bottom:0;"><label>URL / protocolo / resposta</label><input id="customActionValue" placeholder="https://... ou discord:// ou um texto"></div>
+              <button class="btn" id="addCustomCmdBtn" style="height:41px;">Salvar</button>
+            </div>
+            <div id="customCmdList" class="task-list"></div>
+          </div>
+        </div>
+
+        <div style="height:22px"></div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>AI Brain (Local Ollama)</h3><span class="badge" id="aiBrainBadge">offline</span></div>
+          <div class="panel-body">
+            <p style="font-size:12.5px; color:var(--text-mid); line-height:1.6; margin-bottom:16px;">
+              Jarvis uses an AI model running locally on your PC through Ollama. No Anthropic API key is required and AI requests stay on your computer.
+            </p>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+              <div class="field" style="margin-bottom:0;">
+                <label>Ollama URL</label>
+                <input id="ollamaUrlInput" placeholder="http://127.0.0.1:11434">
+              </div>
+              <div class="field" style="margin-bottom:0;">
+                <label>Local model</label>
+                <input id="ollamaModelInput" placeholder="qwen3.5:4b">
+              </div>
+            </div>
+            <div style="height:14px"></div>
+            <div class="toggle-row" style="padding:11px 0;">
+              <span style="font-size:13px;">Enable local AI understanding</span>
+              <button class="switch" id="aiBrainToggle"></button>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;">
+              <button class="btn" id="saveAiKeyBtn">Save Local AI</button>
+              <button class="btn ghost" id="testAiKeyBtn">Test Ollama</button>
+            </div>
+            <div style="height:14px"></div>
+            <div class="status-line"><span>Connection</span><span class="status-val" id="aiConnStatus">not tested</span></div>
+            <p style="font-size:11.5px; color:var(--text-dim); line-height:1.5; margin-top:12px;">
+              Keep Ollama running on Windows. If the browser blocks the local request, configure Ollama to allow your page origin with <code>OLLAMA_ORIGINS</code>.
+            </p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+<div class="pending-link-bar" id="pendingLinkBar" style="display:none;">
+  <span>🔗 <b id="pendingLinkLabel">link</b> pronto — pop-up bloqueado pelo navegador</span>
+  <a id="pendingLinkAnchor" href="#" target="_blank" rel="noopener" class="btn small">Abrir agora</a>
+  <button class="icon-btn" id="pendingLinkClose" title="Fechar">✕</button>
+</div>
+
+<script>
+/* ============================================================
+   MARS JARVIS — PHASE I CORE
+   Vanilla JS. No framework. No backend.
+   All persistent state lives in Google Drive: MARS_JARVIS_DATA.json
+   ============================================================ */
+
+const DRIVE_FILE_NAME = 'MARS_JARVIS_DATA.json';
+const LEGACY_FILE_NAME = 'jarvis-data.json'; // earlier Phase I builds used this name
+
+/* ---------------- State ---------------- */
+const DEFAULT_STATE = () => ({
+  notes: [],          // {id, text, createdAt, updatedAt}
+  tasks: [],          // {id, text, priority, done, createdAt}
+  research: [],        // reserved for future phases
+  settings: { wakeWord: "jarvis", requireWakeWord: true, continuousListening: false, muteResponses: false, voiceName: "", speechRate: 1, speechPitch: 1, language: "pt-BR", assistantName: "Jarvis" },
+  preferences: {},     // free-form user preferences the AI brain can read/write in later phases
+  customCommands: [],  // {id, trigger, type: 'open_url'|'open_app'|'say', value}
+  musicShortcuts: [],  // {id, trigger, query} — "toque X" -> plays this YouTube search/URL
+  conversations: []    // {id, ts, role, text}
+});
+
+let appState = DEFAULT_STATE();
+let driveFileId = null;
+let isDirty = false;
+let commandCount = 0;
+
+/* ---------------- Utilities ---------------- */
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+// Picks a random phrasing so Jarvis doesn't repeat the exact same sentence
+// every time for the same action.
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const nowTime = () => new Date().toLocaleTimeString([], { hour12:false });
+
+function toast(msg, type){
+  const wrap = $('#toastWrap');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }, 3800);
+}
+
+/* ---------------- Navigation ---------------- */
+const sections = ['home','memory','tasks','voice','settings'];
+const titles = { home:'Home', memory:'Memory', tasks:'Tasks', voice:'Voice Console', settings:'Settings' };
+
+function goTo(section){
+  sections.forEach(s => {
+    $('#sec-'+s).classList.toggle('active', s === section);
+  });
+  $$('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.section === section));
+  $('#pageTitle').textContent = titles[section];
+  $('#sidebar').classList.remove('open');
+  $('#scrim').classList.remove('show');
+  if(section === 'memory') renderNotes();
+  if(section === 'tasks') renderTasks();
+}
+$$('.nav-item').forEach(b => b.addEventListener('click', () => goTo(b.dataset.section)));
+$$('[data-nav]').forEach(b => b.addEventListener('click', () => goTo(b.dataset.nav)));
+$('#menuBtn').addEventListener('click', () => { $('#sidebar').classList.add('open'); $('#scrim').classList.add('show'); });
+$('#scrim').addEventListener('click', () => { $('#sidebar').classList.remove('open'); $('#scrim').classList.remove('show'); });
+
+/* ---------------- Clock ---------------- */
+setInterval(() => { $('#clock').textContent = nowTime(); }, 1000);
+$('#clock').textContent = nowTime();
+
+/* ============================================================
+   GOOGLE AUTH + DRIVE
+   ============================================================ */
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+let tokenClient = null;
+let accessToken = null;
+let gapiReady = false;
+
+function loadCreds(){
+  return {
+    clientId: localStorage.getItem('jarvis_client_id') || '',
+    apiKey: localStorage.getItem('jarvis_api_key') || ''
+  };
+}
+(function initCredFields(){
+  const c = loadCreds();
+  $('#clientIdInput').value = c.clientId;
+  $('#apiKeyInput').value = c.apiKey;
+})();
+
+/* ---- Local Ollama AI Brain credentials ---- */
+function loadAiCreds(){
+  return {
+    url: (localStorage.getItem('jarvis_ollama_url') || $('#ollamaUrlInput')?.value || 'http://127.0.0.1:11434').trim().replace(/\/$/, ''),
+    model: (localStorage.getItem('jarvis_ollama_model') || $('#ollamaModelInput')?.value || 'qwen3.5:4b').trim(),
+    enabled: localStorage.getItem('jarvis_ai_enabled') === 'true'
+  };
+}
+function persistAiCreds(){
+  localStorage.setItem('jarvis_ollama_url', $('#ollamaUrlInput').value.trim().replace(/\/$/, ''));
+  localStorage.setItem('jarvis_ollama_model', $('#ollamaModelInput').value.trim());
+  const c = loadAiCreds();
+  updateAiBadge(c.enabled && !!c.model);
+}
+(function initAiFields(){
+  const c = loadAiCreds();
+  $('#ollamaUrlInput').value = c.url;
+  $('#ollamaModelInput').value = c.model;
+  $('#aiBrainToggle').classList.toggle('on', c.enabled);
+  updateAiBadge(c.enabled && !!c.model);
+})();
+function updateAiBadge(on){
+  const b = $('#aiBrainBadge');
+  b.textContent = on ? 'online' : 'offline';
+  b.classList.toggle('low', on);
+}
+$('#ollamaUrlInput').addEventListener('input', persistAiCreds);
+$('#ollamaModelInput').addEventListener('input', persistAiCreds);
+$('#saveAiKeyBtn').addEventListener('click', () => {
+  persistAiCreds();
+  toast('Local AI settings saved', 'success');
+});
+$('#aiBrainToggle').addEventListener('click', (e) => {
+  const now = !e.target.classList.contains('on');
+  const modelPresent = !!$('#ollamaModelInput').value.trim();
+  if(now && !modelPresent){
+    toast('Enter your Ollama model before enabling', 'error');
+    return;
+  }
+  persistAiCreds();
+  e.target.classList.toggle('on', now);
+  localStorage.setItem('jarvis_ai_enabled', String(now));
+  updateAiBadge(now && modelPresent);
+  toast('Local AI understanding ' + (now ? 'enabled' : 'disabled'));
+});
+$('#testAiKeyBtn').addEventListener('click', async () => {
+  persistAiCreds();
+  setStatus('aiConnStatus', 'testing…');
+  try{
+    const reply = await callOllama([{ role:'user', content:'Reply with the single word: online.' }], null);
+    setStatus('aiConnStatus', 'connected', true);
+    toast('Ollama responded: ' + (reply.text || '').slice(0,40), 'success');
+  }catch(e){
+    console.error(e); setStatus('aiConnStatus', 'failed — check Ollama', false);
+    toast('Ollama connection failed: ' + String(e.message || e).slice(0,120), 'error');
+  }
+});
+
+$('#saveCredsBtn').addEventListener('click', () => {
+  const clientId = $('#clientIdInput').value.trim();
+  const apiKey = $('#apiKeyInput').value.trim();
+  if(!clientId){ toast('Client ID is required', 'error'); return; }
+  localStorage.setItem('jarvis_client_id', clientId);
+  localStorage.setItem('jarvis_api_key', apiKey);
+  toast('Credentials saved locally', 'success');
+  initGoogleClient();
+});
+
+function setStatus(id, text, ok){
+  const el = $('#'+id);
+  el.textContent = text;
+  el.classList.toggle('ok', !!ok);
+  el.classList.toggle('bad', ok === false);
+}
+
+function initGoogleClient(){
+  const { clientId } = loadCreds();
+  if(!window.google || !google.accounts){ setStatus('gisStatus','not loaded', false); return; }
+  setStatus('gisStatus', clientId ? 'ready' : 'awaiting client ID', !!clientId);
+  if(!clientId) return;
+
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: DRIVE_SCOPE,
+    callback: async (resp) => {
+      if(resp.error){ toast('Sign-in failed: ' + resp.error, 'error'); return; }
+      accessToken = resp.access_token;
+      setStatus('driveStatus', 'authorized', true);
+      updateSyncPill(true);
+      renderUserChip();
+      await ensureDataFile();
+      await loadMemory();
+      toast('Connected to Google Drive', 'success');
+    }
+  });
+
+  // One Tap / sign-in button for identity (profile chip), separate from Drive scope grant
+  try{
+    google.accounts.id.initialize({
+      client_id: clientId,
+      callback: (resp) => { /* profile info decoded client-side only for display */ }
+    });
+    google.accounts.id.renderButton($('#gsiButtonHolder'), { theme:'filled_black', size:'medium', shape:'pill' });
+  }catch(e){ /* non-fatal */ }
+}
+
+$('#signInBtn').addEventListener('click', () => {
+  if(!tokenClient){ toast('Save your Client ID first', 'error'); return; }
+  tokenClient.requestAccessToken({ prompt: accessToken ? '' : 'consent' });
+});
+$('#signOutBtn').addEventListener('click', () => {
+  if(accessToken && window.google){ google.accounts.oauth2.revoke(accessToken, () => {}); }
+  accessToken = null; driveFileId = null;
+  setStatus('driveStatus', 'not authorized', false);
+  setStatus('fileStatus', 'not found', false);
+  updateSyncPill(false);
+  $('#gsiSlot .user-chip')?.remove();
+  toast('Signed out');
+});
+
+function renderUserChip(){
+  // Minimal chip; avatar/name unavailable without decoding id_token, kept intentionally simple in Phase I
+  let chip = $('#gsiSlot .user-chip');
+  if(!chip){
+    chip = document.createElement('div');
+    chip.className = 'user-chip';
+    chip.innerHTML = '<span class="dot on"></span><span>Connected</span>';
+    $('#gsiSlot').appendChild(chip);
+  }
+}
+
+function updateSyncPill(connected){
+  $('#syncDot').className = 'dot ' + (connected ? 'on' : 'off');
+  $('#syncText').textContent = 'DRIVE · ' + (connected ? 'CONNECTED' : 'DISCONNECTED');
+  if(typeof refreshHomeStatus === 'function') refreshHomeStatus();
+}
+
+/* ---- Drive REST helpers (fetch-based, no gapi client needed) ---- */
+async function driveFetch(url, options={}){
+  if(!accessToken) throw new Error('Not authorized');
+  const headers = Object.assign({}, options.headers, { Authorization: 'Bearer ' + accessToken });
+  const res = await fetch(url, Object.assign({}, options, { headers }));
+  if(!res.ok){ const t = await res.text(); throw new Error('Drive API error ' + res.status + ': ' + t); }
+  return res;
+}
+
+async function findDataFile(){
+  // Prefer the current file name; fall back to the name earlier Phase I
+  // builds used, so upgrading doesn't orphan someone's existing data.
+  const qNew = encodeURIComponent(`name='${DRIVE_FILE_NAME}' and trashed=false`);
+  let res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${qNew}&fields=files(id,name,modifiedTime)&spaces=drive`);
+  let json = await res.json();
+  if(json.files && json.files[0]) return json.files[0];
+
+  const qOld = encodeURIComponent(`name='${LEGACY_FILE_NAME}' and trashed=false`);
+  res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${qOld}&fields=files(id,name,modifiedTime)&spaces=drive`);
+  json = await res.json();
+  return json.files && json.files[0];
+}
+
+async function ensureDataFile(){
+  try{
+    const existing = await findDataFile();
+    if(existing){ driveFileId = existing.id; setStatus('fileStatus', (existing.name) + ' · found', true); return; }
+    // create new
+    const metadata = { name: DRIVE_FILE_NAME, mimeType: 'application/json' };
+    const boundary = 'jarvis_boundary';
+    const body =
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+      `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(DEFAULT_STATE())}\r\n` +
+      `--${boundary}--`;
+    const res = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+      method:'POST',
+      headers:{ 'Content-Type': `multipart/related; boundary=${boundary}` },
+      body
+    });
+    const json = await res.json();
+    driveFileId = json.id;
+    setStatus('fileStatus', 'created', true);
+  }catch(e){
+    console.error(e); setStatus('fileStatus', 'error', false); toast('Could not access ' + DRIVE_FILE_NAME, 'error');
+  }
+}
+
+async function loadMemory(){
+  if(!accessToken || !driveFileId) return;
+  try{
+    const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`);
+    const data = await res.json();
+    const defaults = DEFAULT_STATE();
+    appState = Object.assign(defaults, data);
+    // Deep-merge settings so fields added after this file was first saved
+    // (like language) fall back to their default instead of disappearing.
+    appState.settings = Object.assign({}, defaults.settings, data.settings || {});
+    applySettingsToUI();
+    refreshAllUI();
+    toast('Memory loaded from Drive', 'success');
+  }catch(e){ console.error(e); toast('Failed to load memory', 'error'); }
+}
+
+let saveTimer = null;
+function queueSave(){
+  isDirty = true;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveMemory, 900);
+}
+
+async function saveMemory(){
+  if(!accessToken || !driveFileId){ isDirty = false; return; }
+  try{
+    await driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
+      method:'PATCH',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(appState)
+    });
+    isDirty = false;
+  }catch(e){ console.error(e); toast('Sync to Drive failed', 'error'); }
+}
+
+$('#forceSaveBtn').addEventListener('click', async () => { await saveMemory(); toast('Saved to Drive', 'success'); });
+$('#forceLoadBtn').addEventListener('click', loadMemory);
+
+window.addEventListener('load', () => {
+  const check = setInterval(() => {
+    if(window.google && google.accounts){ clearInterval(check); initGoogleClient(); }
+  }, 200);
+});
+
+/* ============================================================
+   MEMORY FUNCTIONS (edit / delete are generic over any collection)
+   ============================================================ */
+function saveMemoryItem(collection, item){ appState[collection].push(item); queueSave(); }
+function editMemoryItem(collection, id, patch){
+  const arr = appState[collection];
+  const idx = arr.findIndex(i => i.id === id);
+  if(idx > -1){ arr[idx] = Object.assign(arr[idx], patch, { updatedAt: Date.now() }); queueSave(); }
+}
+function deleteMemoryItem(collection, id){
+  appState[collection] = appState[collection].filter(i => i.id !== id);
+  queueSave();
+}
+// Canonical names as specified: saveMemory/loadMemory already exist above (Drive I/O);
+// these two operate on the in-memory state that loadMemory/saveMemory persist.
+function updateMemory(collection, id, patch){ editMemoryItem(collection, id, patch); }
+function deleteMemory(collection, id){ deleteMemoryItem(collection, id); }
+
+/* ============================================================
+   NOTES
+   ============================================================ */
+function addNote(text){
+  if(!text || !text.trim()) return null;
+  const note = { id: uid(), text: text.trim(), createdAt: Date.now(), updatedAt: Date.now() };
+  saveMemoryItem('notes', note);
+  logActivity('Note saved', text.trim());
+  renderNotes(); refreshCounts();
+  return note;
+}
+function deleteNote(id){ deleteMemoryItem('notes', id); renderNotes(); refreshCounts(); }
+function updateNoteText(id, text){ editMemoryItem('notes', id, { text }); renderNotes(); }
+
+function renderNotes(){
+  const q = ($('#noteSearch').value || '').toLowerCase();
+  const grid = $('#notesGrid');
+  const list = appState.notes.filter(n => n.text.toLowerCase().includes(q)).sort((a,b)=>b.createdAt-a.createdAt);
+  $('#noteCountBadge').textContent = list.length + (q ? ' match' + (list.length===1?'':'es') : ' notes');
+  if(!list.length){ grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="em-icon">✎</div><p>No notes yet. Add one above or say "Jarvis, note..."</p></div>`; return; }
+  grid.innerHTML = list.map(n => `
+    <div class="panel note-card" data-id="${n.id}">
+      <div class="note-head"><span class="badge">NOTE</span>
+        <div style="display:flex; gap:2px;">
+          <button class="icon-btn edit" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+          <button class="icon-btn del" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button>
+        </div>
+      </div>
+      <div class="note-text">${escapeHtml(n.text)}</div>
+      <div class="note-foot"><span class="note-meta">${new Date(n.createdAt).toLocaleString()}</span></div>
+    </div>`).join('');
+  grid.querySelectorAll('.note-card').forEach(card => {
+    const id = card.dataset.id;
+    card.querySelector('.del').addEventListener('click', () => deleteNote(id));
+    card.querySelector('.edit').addEventListener('click', () => {
+      const current = appState.notes.find(n=>n.id===id);
+      const next = prompt('Edit note', current.text);
+      if(next !== null) updateNoteText(id, next);
+    });
+  });
+}
+$('#addNoteBtn').addEventListener('click', () => { addNote($('#noteInput').value); $('#noteInput').value=''; });
+$('#noteSearch').addEventListener('input', renderNotes);
+
+/* ============================================================
+   TASKS
+   ============================================================ */
+function addTask(text, priority){
+  if(!text || !text.trim()) return null;
+  const task = { id: uid(), text: text.trim(), priority: priority || 'medium', done:false, createdAt: Date.now() };
+  saveMemoryItem('tasks', task);
+  logActivity('Task added', text.trim());
+  renderTasks(); refreshCounts();
+  return task;
+}
+function completeTask(id){ editMemoryItem('tasks', id, { done:true }); renderTasks(); refreshCounts(); }
+function reopenTask(id){ editMemoryItem('tasks', id, { done:false }); renderTasks(); refreshCounts(); }
+function deleteTask(id){ deleteMemoryItem('tasks', id); renderTasks(); refreshCounts(); }
+
+function renderTasks(){
+  const list = [...appState.tasks].sort((a,b) => {
+    if(a.done !== b.done) return a.done ? 1 : -1;
+    const order = { high:0, medium:1, low:2 };
+    return order[a.priority] - order[b.priority];
+  });
+  const openCount = appState.tasks.filter(t=>!t.done).length;
+  $('#taskCountBadge').textContent = openCount + ' open';
+  const wrap = $('#taskList');
+  if(!list.length){ wrap.innerHTML = `<div class="empty-state panel"><div class="em-icon">☐</div><p>No tasks yet. Add one above or say "Jarvis, add task..."</p></div>`; return; }
+  wrap.innerHTML = list.map(t => `
+    <div class="panel task-row ${t.done?'done':''}" data-id="${t.id}">
+      <button class="task-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></button>
+      <div class="task-text">${escapeHtml(t.text)}</div>
+      <span class="badge ${t.priority}">${t.priority}</span>
+      <div class="task-actions"><button class="icon-btn del" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button></div>
+    </div>`).join('');
+  wrap.querySelectorAll('.task-row').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('.task-check').addEventListener('click', () => {
+      const t = appState.tasks.find(x=>x.id===id);
+      t.done ? reopenTask(id) : completeTask(id);
+    });
+    row.querySelector('.del').addEventListener('click', () => deleteTask(id));
+  });
+}
+$('#addTaskBtn').addEventListener('click', () => {
+  addTask($('#taskInput').value, $('#taskPriority').value);
+  $('#taskInput').value = '';
+});
+
+function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+
+/* ============================================================
+   CUSTOM COMMANDS — user-defined trigger phrases mapped to an
+   action (open a URL, open an app protocol, or just speak text).
+   Checked before both the AI Brain and the offline parser, so a
+   custom command always wins if the trigger phrase is heard.
+   ============================================================ */
+function addCustomCommand(trigger, type, value){
+  trigger = (trigger||'').trim().toLowerCase();
+  if(!trigger || !value) return null;
+  const cmd = { id: uid(), trigger, type, value: value.trim() };
+  appState.customCommands.push(cmd);
+  queueSave();
+  renderCustomCommands();
+  return cmd;
+}
+function deleteCustomCommand(id){
+  appState.customCommands = appState.customCommands.filter(c => c.id !== id);
+  queueSave();
+  renderCustomCommands();
+}
+function findCustomCommand(cmdText){
+  return appState.customCommands.find(c => cmdText.includes(c.trigger));
+}
+function runCustomCommand(c){
+  if(c.type === 'open_url'){ openWebAction(c.value, c.trigger); speak(`Abrindo ${c.trigger}.`); }
+  else if(c.type === 'open_app'){
+    try{ window.location.href = c.value; }catch(e){}
+    speak(`Tentando abrir ${c.trigger}.`);
+  } else {
+    speak(c.value);
+  }
+}
+function renderCustomCommands(){
+  const wrap = $('#customCmdList');
+  if(!wrap) return;
+  if(!appState.customCommands.length){
+    wrap.innerHTML = `<div class="empty-state"><div class="em-icon">⚙</div><p>Nenhum comando personalizado ainda.</p></div>`;
+    return;
+  }
+  wrap.innerHTML = appState.customCommands.map(c => `
+    <div class="panel task-row" data-id="${c.id}">
+      <div class="task-text"><b>"${escapeHtml(c.trigger)}"</b> → <span style="color:var(--text-dim)">${c.type === 'open_url' ? 'abrir ' + escapeHtml(c.value) : c.type === 'open_app' ? 'abrir app ' + escapeHtml(c.value) : 'dizer: ' + escapeHtml(c.value)}</span></div>
+      <div class="task-actions"><button class="icon-btn del" title="Excluir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button></div>
+    </div>`).join('');
+  wrap.querySelectorAll('.task-row').forEach(row => {
+    row.querySelector('.del').addEventListener('click', () => deleteCustomCommand(row.dataset.id));
+  });
+}
+$('#addCustomCmdBtn').addEventListener('click', () => {
+  const trigger = $('#customTrigger').value;
+  const type = $('#customActionType').value;
+  const value = $('#customActionValue').value;
+  if(!trigger.trim() || !value.trim()){ toast('Preencha o gatilho e a ação', 'error'); return; }
+  addCustomCommand(trigger, type, value);
+  $('#customTrigger').value = ''; $('#customActionValue').value = '';
+  toast('Comando personalizado salvo', 'success');
+});
+
+/* ============================================================
+   MUSIC SHORTCUTS — "toque <trigger>" plays a saved YouTube
+   search or direct link instead of whatever the mic heard raw.
+   Checked before the generic "play X" pattern.
+   ============================================================ */
+function addMusicShortcut(trigger, value){
+  trigger = (trigger||'').trim().toLowerCase();
+  value = (value||'').trim();
+  if(!trigger || !value) return null;
+  const s = { id: uid(), trigger, query: value };
+  appState.musicShortcuts.push(s);
+  queueSave();
+  renderMusicShortcuts();
+  return s;
+}
+function deleteMusicShortcut(id){
+  appState.musicShortcuts = appState.musicShortcuts.filter(s => s.id !== id);
+  queueSave();
+  renderMusicShortcuts();
+}
+function findMusicShortcut(cmdText){
+  return appState.musicShortcuts.find(s => cmdText.includes(s.trigger));
+}
+function runMusicShortcut(s){
+  const isUrl = /^https?:\/\//.test(s.query);
+  openWebAction(isUrl ? s.query : YT_SEARCH(s.query), s.trigger);
+  speak(pick([`Tocando ${s.trigger}.`, `Aí está, ${s.trigger}.`, `Colocando ${s.trigger} pra tocar.`]));
+}
+function renderMusicShortcuts(){
+  const wrap = $('#musicShortcutList');
+  if(!wrap) return;
+  if(!appState.musicShortcuts.length){
+    wrap.innerHTML = `<div class="empty-state"><div class="em-icon">♪</div><p>Nenhum atalho de música ainda.</p></div>`;
+    return;
+  }
+  wrap.innerHTML = appState.musicShortcuts.map(s => `
+    <div class="panel task-row" data-id="${s.id}">
+      <div class="task-text">🎵 <b>"${escapeHtml(s.trigger)}"</b> → <span style="color:var(--text-dim)">${escapeHtml(s.query)}</span></div>
+      <div class="task-actions"><button class="icon-btn del" title="Excluir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button></div>
+    </div>`).join('');
+  wrap.querySelectorAll('.task-row').forEach(row => {
+    row.querySelector('.del').addEventListener('click', () => deleteMusicShortcut(row.dataset.id));
+  });
+}
+$('#addMusicShortcutBtn').addEventListener('click', () => {
+  const trigger = $('#musicTrigger').value;
+  const value = $('#musicValue').value;
+  if(!trigger.trim() || !value.trim()){ toast('Preencha o gatilho e a música/link', 'error'); return; }
+  addMusicShortcut(trigger, value);
+  $('#musicTrigger').value = ''; $('#musicValue').value = '';
+  toast('Atalho de música salvo', 'success');
+});
+
+/* ============================================================
+   ACTIVITY FEED / HOME STATS
+   ============================================================ */
+function logActivity(label, detail){
+  const feed = $('#activityFeed');
+  if(feed.querySelector('.empty-state')) feed.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'feed-item';
+  row.innerHTML = `<span class="ts">${nowTime()}</span><span class="tx"><b>${escapeHtml(label)}</b> — ${escapeHtml(detail)}</span>`;
+  feed.prepend(row);
+}
+function refreshCounts(){
+  $('#tag-notes').textContent = appState.notes.length;
+  $('#tag-tasks').textContent = appState.tasks.filter(t=>!t.done).length;
+  $('#statNotes').textContent = appState.notes.length;
+  $('#statTasks').textContent = appState.tasks.filter(t=>!t.done).length;
+  $('#statCmds').textContent = commandCount;
+}
+function refreshAllUI(){ renderNotes(); renderTasks(); refreshCounts(); renderCustomCommands(); renderMusicShortcuts(); }
+
+/* ============================================================
+   WEB ACTIONS — opening sites/searches in a new tab.
+   Browser limitation, stated plainly rather than faked: a page
+   can only open URLs (window.open). It cannot control other
+   desktop apps, the OS, the keyboard/mouse, or force autoplay
+   inside YouTube. And popups genuinely require a real, recent
+   user gesture (click/keypress) — a voice command triggered
+   hands-free by the wake word carries NO such gesture, so no
+   script anywhere can force that tab open; that's the browser
+   protecting you from sites that spam new tabs.
+   Two real mitigations, both implemented below:
+   1) When the command came from a click (Push-to-Talk / Send),
+      we open a blank tab immediately, in that same click, and
+      only navigate it once we know the destination — this keeps
+      the tab "pre-authorized" even though the real URL is only
+      known after an async AI round-trip.
+   2) When there's no gesture at all (hands-free wake word), we
+      can't force it — so instead of failing silently we show a
+      persistent one-click banner with a real link, which always
+      works because it's a genuine click.
+   ============================================================ */
+let pendingWindow = null;
+function armPendingWindow(){
+  try{ pendingWindow = window.open('about:blank', '_blank'); }catch(e){ pendingWindow = null; }
+  return pendingWindow;
+}
+function disarmPendingWindow(){
+  if(pendingWindow && !pendingWindow.closed){ try{ pendingWindow.close(); }catch(e){} }
+  pendingWindow = null;
+}
+function showPendingLinkBanner(url, label){
+  const bar = $('#pendingLinkBar');
+  $('#pendingLinkLabel').textContent = label;
+  const a = $('#pendingLinkAnchor');
+  a.href = url;
+  bar.style.display = 'flex';
+}
+$('#pendingLinkClose').addEventListener('click', () => { $('#pendingLinkBar').style.display = 'none'; });
+$('#pendingLinkAnchor').addEventListener('click', () => { $('#pendingLinkBar').style.display = 'none'; });
+
+/* ---------------- Tabs Jarvis itself opened (closable) ----------------
+   A page can only close a window it holds a live reference to — it's a
+   hard browser security rule, not a gap in this build. So we keep a
+   runtime registry of every tab WE opened (this is lost on reload —
+   window handles can't be saved to Drive) and let voice commands close
+   from that registry by label and, optionally, an index when there are
+   several tabs of the same site. Tabs opened by the user themselves, or
+   any other site's tabs, are permanently outside what any page can touch. */
+let openedTabs = []; // {label, win}
+function registerOpenedTab(win, label){
+  if(!win) return;
+  openedTabs.push({ label: label.toLowerCase(), win });
+  if(openedTabs.length > 30) openedTabs.shift();
+}
+function closeTabByQuery(query){
+  query = (query || '').trim().toLowerCase();
+  openedTabs = openedTabs.filter(t => !t.win.closed); // drop stale refs
+  if(!openedTabs.length) return { closed:false, reason:'none' };
+  if(!query){
+    const last = openedTabs.pop();
+    try{ last.win.close(); }catch(e){}
+    return { closed:true, label:last.label };
+  }
+  const numMatch = query.match(/(\d+)\s*$/);
+  const num = numMatch ? parseInt(numMatch[1], 10) : null;
+  const namePart = query.replace(/\d+\s*$/, '').trim();
+  const matches = openedTabs.filter(t => !namePart || t.label.includes(namePart));
+  if(!matches.length) return { closed:false, reason:'not_found' };
+  const target = num ? matches[num - 1] : matches[matches.length - 1];
+  if(!target) return { closed:false, reason:'not_found' };
+  try{ target.win.close(); }catch(e){}
+  openedTabs = openedTabs.filter(t => t !== target);
+  return { closed:true, label:target.label };
+}
+
+function openWebAction(url, label){
+  // 1) Reuse a tab pre-opened during a real click, if we have one.
+  if(pendingWindow && !pendingWindow.closed){
+    try{
+      pendingWindow.location.href = url;
+      registerOpenedTab(pendingWindow, label);
+      pendingWindow = null;
+      return true;
+    }catch(e){ pendingWindow = null; }
+  }
+  // 2) Try a direct open — works if a user gesture is still fresh enough.
+  let win = null;
+  try{ win = window.open(url, '_blank', 'noopener'); }catch(e){ win = null; }
+  if(win){ registerOpenedTab(win, label); return true; }
+  // 3) Blocked with no usable gesture: surface a guaranteed one-click link.
+  // Note: a tab opened this way (by the user's own click on the banner) is
+  // NOT one we hold a reference to, so "fechar aba" can't close it later —
+  // that's the same browser rule, just from the other direction.
+  showPendingLinkBanner(url, label);
+  appendLog('jarvis', `Pop-up bloqueado pelo navegador. Clique no link no topo da tela para abrir ${label}.`);
+  toast('Pop-up bloqueado — clique no aviso no topo para abrir', 'error');
+  return false;
+}
+const YT_SEARCH = q => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+const GOOGLE_SEARCH = q => 'https://www.google.com/search?q=' + encodeURIComponent(q);
+const WEB_DESTINATIONS = {
+  youtube: 'https://www.youtube.com/',
+  google: 'https://www.google.com/',
+  gmail: 'https://mail.google.com/',
+  drive: 'https://drive.google.com/',
+  calendar: 'https://calendar.google.com/',
+  docs: 'https://docs.google.com/',
+  maps: 'https://maps.google.com/',
+  chatgpt: 'https://chat.openai.com/',
+  claude: 'https://claude.ai/'
+};
+// Apps with a desktop client: try the app's custom URL protocol first (only
+// works if the app is installed and the OS/browser allows it — a browser
+// can NEVER launch a .exe directly, this is the closest real equivalent),
+// then fall back to the web version if nothing responds. Note: once the
+// protocol hands off to the native app, the browser has zero further
+// control over it — it cannot be closed from here, ever.
+const APP_DESTINATIONS = {
+  discord: { protocol: 'discord://', webFallback: 'https://discord.com/app', label: 'Discord' },
+  roblox:  { protocol: 'roblox://',  webFallback: 'https://www.roblox.com/games', label: 'Roblox' },
+  spotify: { protocol: 'spotify://', webFallback: 'https://open.spotify.com/', label: 'Spotify' },
+  steam:   { protocol: 'steam://',   webFallback: 'https://store.steampowered.com/', label: 'Steam' }
+};
+function openAppOrWeb(key){
+  const app = APP_DESTINATIONS[key];
+  if(!app) return false;
+  try{ window.location.href = app.protocol; }catch(e){}
+  setTimeout(() => {
+    if(document.visibilityState === 'visible'){
+      openWebAction(app.webFallback, app.label + ' (web)');
+    }
+  }, 900);
+  return true;
+}
+
+/* ============================================================
+   VOICE — Web Speech API (recognition + synthesis)
+   ============================================================ */
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognizer = null;
+let listening = false;
+let pushToTalkActive = false;
+let awaitingCommandAfterWake = false;
+
+function setSTTStatus(){
+  setStatus('sttStatus', SpeechRecognitionAPI ? 'available' : 'unsupported in this browser', !!SpeechRecognitionAPI);
+}
+function setTTSStatus(){
+  const ok = 'speechSynthesis' in window;
+  setStatus('ttsStatus', ok ? 'available' : 'unsupported in this browser', ok);
+}
+setSTTStatus(); setTTSStatus();
+
+function populateVoices(){
+  if(!('speechSynthesis' in window)) return;
+  const voices = speechSynthesis.getVoices();
+  if(!voices.length) return;
+  const sel = $('#voiceSelect');
+  const lang = (appState.settings.language || 'pt-BR');
+  const prefix = lang.split('-')[0];
+  const matching = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith(prefix));
+  const rest = voices.filter(v => !matching.includes(v));
+  const ordered = [...matching, ...rest];
+  sel.innerHTML = ordered.map(v => `<option value="${v.name}">${v.name} (${v.lang})${matching.includes(v) ? ' ★' : ''}</option>`).join('');
+  if(appState.settings.voiceName && ordered.some(v => v.name === appState.settings.voiceName)){
+    sel.value = appState.settings.voiceName;
+  } else if(matching[0]){
+    sel.value = matching[0].name; // auto-pick a voice matching the chosen language
+  }
+}
+if('speechSynthesis' in window){ speechSynthesis.onvoiceschanged = populateVoices; populateVoices(); }
+$('#voiceSelect').addEventListener('change', (e) => { appState.settings.voiceName = e.target.value; queueSave(); });
+
+$('#languageSelect').addEventListener('change', (e) => {
+  appState.settings.language = e.target.value;
+  appState.settings.voiceName = ''; // let it re-pick a matching voice for the new language
+  queueSave();
+  applyLanguageSettings();
+  toast('Idioma atualizado para ' + e.target.options[e.target.selectedIndex].text);
+});
+function applyLanguageSettings(){
+  const lang = appState.settings.language || 'pt-BR';
+  if(recognizer){ recognizer.lang = lang; }
+  populateVoices();
+}
+
+let speaking = false;
+function setSpeakingUI(on){
+  speaking = on;
+  $('#coreCenter').classList.toggle('listening', on || listening);
+  if(on){ $('#coreStatus').innerHTML = 'SPEAKING<small>JARVIS</small>'; $('#coreCaption').textContent = 'Responding…'; }
+  else if(listening){ setListeningUI(true); }
+  else{ $('#coreStatus').innerHTML = 'STANDBY<small>SAY "JARVIS"</small>'; $('#coreCaption').textContent = 'Idle · awaiting wake word'; }
+  refreshHomeStatus();
+}
+function speak(text){
+  appendLog('jarvis', text);
+  if(appState.settings.muteResponses) return;
+  if(!('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  const lang = appState.settings.language || 'pt-BR';
+  utter.lang = lang;
+  const voices = speechSynthesis.getVoices();
+  let chosen = voices.find(v => v.name === appState.settings.voiceName);
+  if(!chosen){ const prefix = lang.split('-')[0]; chosen = voices.find(v => v.lang && v.lang.toLowerCase().startsWith(prefix)); }
+  if(chosen) utter.voice = chosen;
+  utter.rate = appState.settings.speechRate || 1;
+  utter.pitch = appState.settings.speechPitch || 1;
+  utter.onstart = () => setSpeakingUI(true);
+  utter.onend = () => setSpeakingUI(false);
+  utter.onerror = () => setSpeakingUI(false);
+  speechSynthesis.speak(utter);
+}
+function stopSpeaking(){
+  if('speechSynthesis' in window){ speechSynthesis.cancel(); }
+  setSpeakingUI(false);
+}
+$('#stopSpeakingBtn').addEventListener('click', stopSpeaking);
+
+function appendLog(role, text){
+  const log = $('#consoleLog');
+  const row = document.createElement('div');
+  row.className = 'log-line ' + role;
+  const whoLabel = role === 'jarvis' ? (appState.settings.assistantName || 'Jarvis').toUpperCase() : 'VOCÊ';
+  row.innerHTML = `<span class="ts">${nowTime()}</span><span class="who">${whoLabel}</span><span class="msg">${escapeHtml(text)}</span>`;
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+  appState.conversations.push({ id: uid(), ts: Date.now(), role, text });
+  if(appState.conversations.length > 300) appState.conversations.shift();
+  queueSave();
+}
+$('#clearLogBtn').addEventListener('click', () => { $('#consoleLog').innerHTML=''; });
+
+let processing = false;
+function refreshHomeStatus(){
+  const s = $('#statSystem'); if(s) s.textContent = 'ONLINE';
+  const mic = $('#statMic'); if(mic){ mic.textContent = listening ? 'ACTIVE' : 'MUTED'; mic.classList.toggle('ok', listening); mic.classList.toggle('bad', !listening); }
+  const goog = $('#statGoogle'); if(goog){ goog.textContent = accessToken ? 'CONNECTED' : 'DISCONNECTED'; goog.classList.toggle('ok', !!accessToken); goog.classList.toggle('bad', !accessToken); }
+  const voice = $('#statVoice'); if(voice){
+    voice.textContent = speaking ? 'SPEAKING' : processing ? 'PROCESSING' : listening ? 'LISTENING' : 'IDLE';
+    voice.classList.toggle('ok', speaking || listening);
+    voice.classList.toggle('bad', false);
+  }
+}
+
+function setListeningUI(on){
+  listening = on;
+  $('#topMicIndicator').classList.toggle('listening', on);
+  $('#topMicText').textContent = on ? 'MIC LIVE' : 'MIC IDLE';
+  $('#coreCenter').classList.toggle('listening', on);
+  $('#coreStatus').innerHTML = on ? 'LISTENING<small>' + (awaitingCommandAfterWake ? 'AWAITING COMMAND' : 'FOR "JARVIS"') + '</small>' : 'STANDBY<small>SAY "JARVIS"</small>';
+  $('#coreCaption').textContent = on ? 'Active · microphone streaming' : 'Idle · awaiting wake word';
+  $('#pushToTalkBtn').classList.toggle('active', on && pushToTalkActive);
+  refreshHomeStatus();
+}
+
+function initRecognizer(){
+  if(!SpeechRecognitionAPI) return null;
+  const r = new SpeechRecognitionAPI();
+  r.continuous = true;
+  r.interimResults = false;
+  r.lang = appState.settings.language || 'pt-BR';
+  r.onresult = (event) => {
+    const transcript = event.results[event.results.length-1][0].transcript.trim();
+    if(!transcript) return;
+    handleHeardSpeech(transcript);
+  };
+  r.onerror = (e) => { console.warn('Speech error', e.error); if(e.error === 'not-allowed'){ toast('Microphone permission denied', 'error'); stopListening(); } };
+  r.onend = () => {
+    if(listening && (appState.settings.continuousListening || pushToTalkActive)){
+      try{ r.start(); }catch(e){}
+    } else {
+      setListeningUI(false);
+    }
+  };
+  return r;
+}
+
+function startListening(){
+  if(!SpeechRecognitionAPI){ toast('Speech recognition not supported in this browser', 'error'); return; }
+  if(!recognizer) recognizer = initRecognizer();
+  try{ recognizer.start(); setListeningUI(true); }catch(e){ /* already started */ }
+}
+function stopListening(){
+  if(recognizer){ try{ recognizer.stop(); }catch(e){} }
+  setListeningUI(false);
+  awaitingCommandAfterWake = false;
+}
+
+function handleHeardSpeech(transcript){
+  const lower = transcript.toLowerCase();
+  const wake = appState.settings.wakeWord || 'jarvis';
+  appendLog('user', transcript);
+
+  if(appState.settings.requireWakeWord === false){
+    // Wake word disabled: every heard phrase is treated directly as a command.
+    runCommand(lower, transcript);
+    return;
+  }
+
+  if(lower.includes(wake)){
+    const after = lower.split(wake).slice(1).join(' ').trim();
+    if(after){
+      runCommand(after, transcript);
+    } else {
+      awaitingCommandAfterWake = true;
+      setListeningUI(true);
+      speak(pick(['Sim? Estou ouvindo.', 'Diga.', 'Pode falar.']));
+    }
+    return;
+  }
+  if(awaitingCommandAfterWake){
+    awaitingCommandAfterWake = false;
+    runCommand(lower, transcript);
+    setListeningUI(true);
+  }
+}
+
+$('#pushToTalkBtn').addEventListener('click', () => {
+  pushToTalkActive = !pushToTalkActive;
+  if(pushToTalkActive){
+    armPendingWindow(); // real click here — pre-authorize a tab in case the spoken command needs one
+    startListening();
+  } else {
+    stopListening();
+    disarmPendingWindow(); // no command used it in this session — close the blank tab
+  }
+});
+$('#continuousToggle').addEventListener('click', (e) => {
+  appState.settings.continuousListening = !appState.settings.continuousListening;
+  e.target.classList.toggle('on', appState.settings.continuousListening);
+  queueSave();
+  if(appState.settings.continuousListening) startListening(); else if(!pushToTalkActive) stopListening();
+});
+$('#muteToggle').addEventListener('click', (e) => {
+  appState.settings.muteResponses = !appState.settings.muteResponses;
+  e.target.classList.toggle('on', appState.settings.muteResponses);
+  if(appState.settings.muteResponses) stopSpeaking();
+  queueSave();
+});
+
+/* ---- Wake word + speech rate/pitch ---- */
+$('#wakeWordInput').addEventListener('change', (e) => {
+  const val = e.target.value.trim().toLowerCase();
+  appState.settings.wakeWord = val || 'jarvis';
+  queueSave();
+});
+$('#wakeWordToggle').addEventListener('click', (e) => {
+  appState.settings.requireWakeWord = !appState.settings.requireWakeWord;
+  e.target.classList.toggle('on', appState.settings.requireWakeWord);
+  queueSave();
+  toast(appState.settings.requireWakeWord ? 'Wake word required before commands' : 'Wake word disabled — every heard phrase is treated as a command');
+});
+$('#rateInput').addEventListener('input', (e) => {
+  appState.settings.speechRate = parseFloat(e.target.value);
+  $('#rateVal').textContent = appState.settings.speechRate.toFixed(1);
+  queueSave();
+});
+$('#pitchInput').addEventListener('input', (e) => {
+  appState.settings.speechPitch = parseFloat(e.target.value);
+  $('#pitchVal').textContent = appState.settings.speechPitch.toFixed(1);
+  queueSave();
+});
+
+/* ---- Microphone device list (informational — see limitation note in Settings) ---- */
+async function refreshMicList(requestPermission){
+  const sel = $('#micSelect');
+  if(!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices){
+    sel.innerHTML = '<option value="">Not supported in this browser</option>'; return;
+  }
+  try{
+    // Only ask for the mic permission prompt when the user explicitly clicks
+    // "Refresh Device List" — never automatically, and never on every visit
+    // to Settings. Without a fresh permission grant, device labels are just
+    // blank (browser privacy rule), which is fine — the list still works.
+    if(requestPermission){
+      try{ const s = await navigator.mediaDevices.getUserMedia({ audio:true }); s.getTracks().forEach(t=>t.stop()); }catch(e){ toast('Permissão de microfone negada ou ainda não concedida', 'error'); }
+    }
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics = devices.filter(d => d.kind === 'audioinput');
+    sel.innerHTML = '<option value="">Browser default</option>' + mics.map((d,i) => `<option value="${d.deviceId}">${d.label || 'Microfone ' + (i+1) + ' (permita o acesso para ver o nome)'}</option>`).join('');
+  }catch(e){ console.warn(e); sel.innerHTML = '<option value="">Could not list devices</option>'; }
+}
+$('#refreshMicsBtn').addEventListener('click', () => refreshMicList(true));
+refreshMicList(false); // populate silently on load — no permission prompt
+
+function applySettingsToUI(){
+  $('#continuousToggle').classList.toggle('on', !!appState.settings.continuousListening);
+  $('#muteToggle').classList.toggle('on', !!appState.settings.muteResponses);
+  $('#wakeWordToggle').classList.toggle('on', appState.settings.requireWakeWord !== false);
+  $('#wakeWordInput').value = appState.settings.wakeWord || 'jarvis';
+  $('#languageSelect').value = appState.settings.language || 'pt-BR';
+  $('#assistantNameInput').value = appState.settings.assistantName || 'Jarvis';
+  $('#rateInput').value = appState.settings.speechRate || 1;
+  $('#rateVal').textContent = (appState.settings.speechRate || 1).toFixed(1);
+  $('#pitchInput').value = appState.settings.speechPitch || 1;
+  $('#pitchVal').textContent = (appState.settings.speechPitch || 1).toFixed(1);
+  applyLanguageSettings();
+  if(appState.settings.continuousListening) startListening();
+}
+$('#assistantNameInput').addEventListener('change', (e) => {
+  appState.settings.assistantName = e.target.value.trim() || 'Jarvis';
+  queueSave();
+  toast('Nome atualizado para ' + appState.settings.assistantName);
+});
+
+/* ---------------- Typed command fallback ---------------- */
+$('#sendTypedBtn').addEventListener('click', sendTyped);
+$('#typedCommand').addEventListener('keydown', (e) => { if(e.key==='Enter') sendTyped(); });
+function sendTyped(){
+  const val = $('#typedCommand').value.trim();
+  if(!val) return;
+  armPendingWindow(); // real click/Enter here — pre-authorize a tab before the async AI round-trip
+  appendLog('user', val);
+  let text = val.toLowerCase();
+  const wake = appState.settings.wakeWord || 'jarvis';
+  if(text.startsWith(wake)) text = text.slice(wake.length).trim();
+  runCommand(text, val);
+  $('#typedCommand').value = '';
+}
+
+/* ============================================================
+   AI BRAIN — Local Ollama API
+   Gives Jarvis real natural-language understanding: general
+   conversation/knowledge PLUS reliable execution of app actions
+   via Ollama tool use. Falls back to the offline regex parser
+   below when disabled, unset, or on network failure.
+   ============================================================ */
+const AI_TOOLS = [
+  { name:'add_note', description:'Save a new note to memory.', input_schema:{ type:'object', properties:{ text:{type:'string'} }, required:['text'] } },
+  { name:'list_notes', description:'Read back the most recent notes.', input_schema:{ type:'object', properties:{} } },
+  { name:'delete_note', description:'Delete a note matching a keyword or phrase.', input_schema:{ type:'object', properties:{ query:{type:'string'} }, required:['query'] } },
+  { name:'add_task', description:'Add a new task/to-do.', input_schema:{ type:'object', properties:{ text:{type:'string'}, priority:{type:'string', enum:['low','medium','high']} }, required:['text'] } },
+  { name:'complete_task', description:'Mark a task complete, matched by keyword.', input_schema:{ type:'object', properties:{ query:{type:'string'} }, required:['query'] } },
+  { name:'delete_task', description:'Delete a task matched by keyword.', input_schema:{ type:'object', properties:{ query:{type:'string'} }, required:['query'] } },
+  { name:'list_tasks', description:'Read back open tasks.', input_schema:{ type:'object', properties:{} } },
+  { name:'open_youtube', description:'Open the YouTube homepage.', input_schema:{ type:'object', properties:{} } },
+  { name:'search_youtube', description:'Search YouTube for a query without necessarily wanting music playback.', input_schema:{ type:'object', properties:{ query:{type:'string'} }, required:['query'] } },
+  { name:'play_youtube', description:'Play/search YouTube for a song, artist, or type of music/video the user wants to listen to or watch.', input_schema:{ type:'object', properties:{ query:{type:'string'} }, required:['query'] } },
+  { name:'open_google', description:'Open the Google homepage.', input_schema:{ type:'object', properties:{} } },
+  { name:'search_google', description:'Perform a Google search.', input_schema:{ type:'object', properties:{ query:{type:'string'} }, required:['query'] } },
+  { name:'open_site', description:'Open a known Google/AI web app by name.', input_schema:{ type:'object', properties:{ site:{type:'string', enum:['gmail','drive','calendar','docs','maps','chatgpt','claude']} }, required:['site'] } },
+  { name:'open_app', description:'Open a desktop app that has its own URL protocol, like Discord, Roblox, Spotify, or Steam.', input_schema:{ type:'object', properties:{ app:{type:'string', enum:['discord','roblox','spotify','steam']} }, required:['app'] } },
+  { name:'close_tab', description:'Close a browser tab that Jarvis itself previously opened, identified by a name and optional number (e.g. "google 2" for the second Google tab, or empty for the most recently opened tab). Cannot close tabs it did not open, or native apps like Discord once they have launched.', input_schema:{ type:'object', properties:{ query:{type:'string'} } } },
+  { name:'stop_speaking', description:'Immediately stop Jarvis from talking, e.g. user says "stop talking" or "be quiet".', input_schema:{ type:'object', properties:{} } },
+  { name:'chat_reply', description:'Use this for general conversation, opinions, small talk, or answering any question that is not a note/task/browser action. Put your full spoken answer in text.', input_schema:{ type:'object', properties:{ text:{type:'string'} }, required:['text'] } }
+];
+
+const LANGUAGE_NAMES = { 'pt-BR':'Brazilian Portuguese', 'pt-PT':'European Portuguese', 'en-US':'English', 'en-GB':'English', 'es-ES':'Spanish', 'fr-FR':'French', 'de-DE':'German', 'it-IT':'Italian' };
+function aiSystemPrompt(){
+  const openTasks = appState.tasks.filter(t=>!t.done).length;
+  const langName = LANGUAGE_NAMES[appState.settings.language] || 'the language the user speaks to you in';
+  const name = appState.settings.assistantName || 'Jarvis';
+  const musicList = appState.musicShortcuts.map(m => m.trigger).join(', ') || 'none saved yet';
+  return `You are ${name}, a concise, capable voice assistant embedded in a personal dashboard called Mars Jarvis. Refer to yourself as ${name} if asked your name. `+
+    `The user currently has ${appState.notes.length} notes and ${openTasks} open tasks. Saved music shortcuts: ${musicList}. `+
+    `Always respond by calling exactly one tool. Use add_note/list_notes/delete_note/add_task/complete_task/delete_task/list_tasks for those specific actions, and open_youtube/search_youtube/play_youtube/open_google/search_google/open_site/open_app/close_tab/stop_speaking for browser navigation. `+
+    `For anything else — questions, conversation, requests for information, opinions — call chat_reply with a spoken-style answer: brief, natural, one or two sentences, no markdown, since it will be read aloud by speech synthesis. Vary your phrasing naturally between turns instead of repeating the same sentence structure every time. `+
+    `Always reply in ${langName}, regardless of what language this instruction is written in — that is the user's configured voice language.`;
+}
+
+async function callOllama(messages, tools){
+  const { url, model } = loadAiCreds();
+  if(!url) throw new Error('No Ollama URL set');
+  if(!model) throw new Error('No Ollama model set');
+  const body = {
+    model,
+    messages: messages.map(m => ({ role:m.role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) })),
+    stream: false
+  };
+  if(tools){
+    body.tools = tools.map(t => ({ type:'function', function:{ name:t.name, description:t.description, parameters:t.input_schema } }));
+  }
+  const res = await fetch(url + '/api/chat', {
+    method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body)
+  });
+  if(!res.ok){ const t=await res.text(); throw new Error('Ollama API ' + res.status + ': ' + t); }
+  const data=await res.json();
+  const msg=data.message || {};
+  const tc=msg.tool_calls && msg.tool_calls[0];
+  let toolUse=null;
+  if(tc){
+    let args=tc.function?.arguments || {};
+    if(typeof args==='string'){ try{ args=JSON.parse(args); }catch(e){} }
+    toolUse={name:tc.function?.name,input:args};
+  }
+  return {toolUse,text:(msg.content||'').trim(),raw:data};
+}
+
+async function askOllamaBrain(commandText){
+  const { toolUse, text } = await callOllama([{ role:'user', content: commandText }], AI_TOOLS);
+  if(!toolUse) return text || "Não tenho certeza de como responder isso.";
+  const input = toolUse.input || {};
+  switch(toolUse.name){
+    case 'add_note': addNote(input.text); return 'I have saved your note.';
+    case 'list_notes': {
+      if(!appState.notes.length) return 'You have no notes yet.';
+      const latest = [...appState.notes].sort((a,b)=>b.createdAt-a.createdAt).slice(0,3);
+      goTo('memory');
+      return `You have ${appState.notes.length} notes. Most recent: ${latest.map(n=>n.text).join('. ')}`;
+    }
+    case 'delete_note': {
+      const match = appState.notes.find(n => n.text.toLowerCase().includes((input.query||'').toLowerCase()));
+      if(match){ deleteNote(match.id); return 'Note deleted.'; }
+      return 'I could not find a note matching that.';
+    }
+    case 'add_task': addTask(input.text, input.priority || 'medium'); return `Task added${input.priority && input.priority!=='medium' ? ' with ' + input.priority + ' priority' : ''}.`;
+    case 'complete_task': {
+      const match = appState.tasks.find(t => !t.done && t.text.toLowerCase().includes((input.query||'').toLowerCase()));
+      if(match){ completeTask(match.id); return 'Task marked complete.'; }
+      return 'I could not find that open task.';
+    }
+    case 'delete_task': {
+      const match = appState.tasks.find(t => t.text.toLowerCase().includes((input.query||'').toLowerCase()));
+      if(match){ deleteTask(match.id); return 'Task deleted.'; }
+      return 'I could not find that task.';
+    }
+    case 'list_tasks': {
+      const open = appState.tasks.filter(t=>!t.done);
+      goTo('tasks');
+      return open.length ? `You have ${open.length} open tasks. Top priority: ${open[0].text}` : 'You have no open tasks.';
+    }
+    case 'open_youtube': openWebAction(WEB_DESTINATIONS.youtube, 'YouTube'); return 'Certainly.';
+    case 'search_youtube': openWebAction(YT_SEARCH(input.query), 'YouTube search'); return `Searching YouTube for ${input.query}.`;
+    case 'play_youtube': openWebAction(YT_SEARCH(input.query), 'YouTube'); return `Playing ${input.query} on YouTube.`;
+    case 'open_google': openWebAction(WEB_DESTINATIONS.google, 'Google'); return 'Certainly.';
+    case 'search_google': openWebAction(GOOGLE_SEARCH(input.query), 'Google search'); return `Searching Google for ${input.query}.`;
+    case 'open_site': {
+      const url = WEB_DESTINATIONS[input.site];
+      const label = input.site.charAt(0).toUpperCase() + input.site.slice(1);
+      if(!url) return "I don't have a link for that.";
+      openWebAction(url, label);
+      return `Opening ${label}.`;
+    }
+    case 'open_app': {
+      const app = APP_DESTINATIONS[input.app];
+      if(!app) return "I don't know how to open that app.";
+      openAppOrWeb(input.app);
+      return `Tentando abrir o ${app.label}. Se ele não estiver instalado, vou abrir a versão web.`;
+    }
+    case 'close_tab': {
+      const result = closeTabByQuery(input.query || '');
+      if(result.closed) return `Fechei a aba${result.label ? ' de ' + result.label : ''}.`;
+      if(result.reason === 'none') return 'Não tenho nenhuma aba aberta por mim ainda para fechar.';
+      return 'Não encontrei essa aba entre as que eu abri.';
+    }
+    case 'stop_speaking': stopSpeaking(); return '';
+    case 'chat_reply': default: return input.text || "Não tenho certeza de como responder isso.";
+  }
+}
+
+function setProcessingUI(on){
+  processing = on;
+  $('#coreCenter').classList.toggle('listening', on || listening);
+  if(on){ $('#coreStatus').innerHTML = 'PROCESSING<small>ASKING LOCAL AI</small>'; $('#coreCaption').textContent = 'Thinking…'; }
+  else if(listening){ setListeningUI(true); }
+  else{ $('#coreStatus').innerHTML = 'STANDBY<small>SAY "JARVIS"</small>'; $('#coreCaption').textContent = 'Idle · awaiting wake word'; }
+  refreshHomeStatus();
+}
+
+/* ============================================================
+   COMMAND PARSER (offline fallback)
+   Recognized patterns when the AI Brain is off or unavailable:
+     note / save note / add note <text>
+     show notes / read notes
+     add task / new task / remind me to <text>  [priority high/medium/low]
+     complete task <text>
+     delete task <text>
+     delete note <text>
+     show tasks
+     what can you do / help
+   ============================================================ */
+async function runCommand(cmdRaw, original){
+  const cmd = cmdRaw.trim().replace(/^[,:\s]+/, '');
+  commandCount++; refreshCounts();
+
+  try{
+    // Custom user-defined commands and saved music shortcuts always take priority.
+    const custom = findCustomCommand(cmd);
+    if(custom){ runCustomCommand(custom); return; }
+    const musicShortcut = findMusicShortcut(cmd);
+    if(musicShortcut){ runMusicShortcut(musicShortcut); return; }
+
+    const { enabled, key } = loadAiCreds();
+    if(enabled && key){
+      setProcessingUI(true);
+      try{
+        const reply = await askOllamaBrain(original || cmd);
+        setProcessingUI(false);
+        if(reply) speak(reply);
+      }catch(e){
+        console.error(e);
+        setProcessingUI(false);
+        appendLog('jarvis', 'AI Brain error: ' + String(e.message || e).slice(0,160));
+        toast('AI Brain error — see console log', 'error');
+        speak("Não consegui falar com minha IA agora, vou tentar do jeito básico.");
+        runCommandFallback(cmd, original);
+      }
+      return;
+    }
+    runCommandFallback(cmd, original);
+  } finally {
+    // If a click pre-armed a blank tab but this command turned out not to
+    // be a navigation (e.g. "note ..."), don't leave an empty tab hanging.
+    disarmPendingWindow();
+  }
+}
+
+function runCommandFallback(cmd, original){
+  // ---- stop speaking ----
+  if(/^(stop\s+(talking|speaking)|be\s+quiet|shut\s+up|cancel|pare\s+de\s+falar|cale[-\s]?se|sil[eê]ncio|cancelar)\b/.test(cmd)){
+    stopSpeaking();
+    return;
+  }
+  // ---- close a tab Jarvis itself opened ----
+  const closeLead = /^(close\s+tab|fechar\s+(a\s+)?aba|fechar)\b/;
+  if(closeLead.test(cmd)){
+    const query = cmd.replace(closeLead, '').replace(/^(a\s+|o\s+|do\s+|da\s+)?/, '').trim();
+    const result = closeTabByQuery(query);
+    if(result.closed){
+      speak(pick([`Fechei${result.label ? ' a aba de ' + result.label : ' a aba'}.`, `Pronto, fechada${result.label ? ' a de ' + result.label : ''}.`, `Feito, aba fechada.`]));
+    } else if(result.reason === 'none'){
+      speak('Não tenho nenhuma aba aberta por mim ainda para fechar.');
+    } else {
+      speak('Não encontrei essa aba entre as que eu abri. Só consigo fechar abas que eu mesmo abri.');
+    }
+    return;
+  }
+  // ---- YouTube: play / search ----
+  if(/^(play|toque|toca|tocar|reproduza|reproduzir)\s+/.test(cmd)){
+    const q = cmd.replace(/^(play|toque|toca|tocar|reproduza|reproduzir)\s+/, '').replace(/\s+(on|no)\s+youtube\b.*/, '').trim() || original;
+    openWebAction(YT_SEARCH(q), 'YouTube');
+    speak(pick([`Tocando ${q} no YouTube.`, `Colocando ${q} pra tocar.`, `Aqui está ${q} no YouTube.`]));
+    return;
+  }
+  if(/^(search\s+youtube\s+for|pesquisar?\s+(no\s+)?youtube( por)?|busque?\s+(no\s+)?youtube( por)?)\b/.test(cmd)){
+    const q = cmd.replace(/^(search\s+youtube\s+for|pesquisar?\s+(no\s+)?youtube( por)?|busque?\s+(no\s+)?youtube( por)?)\b[:\s]*/, '').trim();
+    openWebAction(YT_SEARCH(q), 'YouTube search');
+    speak(pick([`Pesquisando ${q} no YouTube.`, `Buscando ${q} no YouTube pra você.`]));
+    return;
+  }
+  if(/^(open\s+youtube|abrir\s+(o\s+)?youtube)\b/.test(cmd)){
+    openWebAction(WEB_DESTINATIONS.youtube, 'YouTube');
+    speak(pick(['Certo.', 'Abrindo o YouTube.', 'Pronto.']));
+    return;
+  }
+  // ---- Google search — leading-verb form ("pesquisar X no google") ----
+  const googleLead = /^(search\s+google\s+for|pesquisar?\s+(no\s+)?google( por)?|busque?\s+(no\s+)?google( por)?|procurar?\s+(no\s+)?google( por)?)\b/;
+  if(googleLead.test(cmd)){
+    const q = cmd.replace(googleLead, '').replace(/^[:\s]*/, '').replace(/\s+no\s+google\s*$/, '').trim();
+    if(q){
+      openWebAction(GOOGLE_SEARCH(q), 'Google search');
+      speak(pick([`Pesquisando ${q} no Google.`, `Buscando ${q} no Google.`]));
+      return;
+    }
+  }
+  // ---- Google search — trailing form ("gatos siameses no google") ----
+  if(/\s+no\s+google\s*$/.test(cmd)){
+    const q = cmd.replace(/\s+no\s+google\s*$/, '').trim();
+    if(q){
+      openWebAction(GOOGLE_SEARCH(q), 'Google search');
+      speak(pick([`Pesquisando ${q} no Google.`, `Buscando ${q} no Google.`]));
+      return;
+    }
+  }
+  if(/^(open\s+google|abrir\s+(o\s+)?google)\b(?!\s*(drive|docs|calend[aá]rio|calendar|maps|mapa))/.test(cmd)){
+    openWebAction(WEB_DESTINATIONS.google, 'Google');
+    speak(pick(['Certo.', 'Abrindo o Google.']));
+    return;
+  }
+  if(/^(open\s+gmail|abrir\s+(o\s+)?gmail)\b/.test(cmd)){ openWebAction(WEB_DESTINATIONS.gmail, 'Gmail'); speak('Abrindo o Gmail.'); return; }
+  if(/^(open\s+(google\s+)?drive|abrir\s+(o\s+)?drive)\b/.test(cmd)){ openWebAction(WEB_DESTINATIONS.drive, 'Google Drive'); speak('Abrindo o Google Drive.'); return; }
+  if(/^(open\s+(google\s+)?calendar|abrir\s+(a\s+)?agenda|abrir\s+(o\s+)?calend[aá]rio)\b/.test(cmd)){ openWebAction(WEB_DESTINATIONS.calendar, 'Google Calendar'); speak('Abrindo o Google Agenda.'); return; }
+  if(/^(open\s+(google\s+)?docs|abrir\s+(o\s+)?google\s+docs|abrir\s+documentos)\b/.test(cmd)){ openWebAction(WEB_DESTINATIONS.docs, 'Google Docs'); speak('Abrindo o Google Docs.'); return; }
+  if(/^(open\s+(google\s+)?maps|abrir\s+(o\s+)?maps|abrir\s+mapa)\b/.test(cmd)){ openWebAction(WEB_DESTINATIONS.maps, 'Google Maps'); speak('Abrindo o Google Maps.'); return; }
+  if(/^(open\s+chat\s?gpt|abrir\s+(o\s+)?chat\s?gpt)\b/.test(cmd)){ openWebAction(WEB_DESTINATIONS.chatgpt, 'ChatGPT'); speak('Abrindo o ChatGPT.'); return; }
+  if(/^(open\s+claude|abrir\s+(o\s+)?claude)\b/.test(cmd)){ openWebAction(WEB_DESTINATIONS.claude, 'Claude'); speak('Abrindo o Claude.'); return; }
+  if(/^(open\s+discord|abrir\s+(o\s+)?discord)\b/.test(cmd)){ openAppOrWeb('discord'); speak('Tentando abrir o Discord.'); return; }
+  if(/^(open\s+roblox|abrir\s+(o\s+)?roblox)\b/.test(cmd)){ openAppOrWeb('roblox'); speak('Tentando abrir o Roblox.'); return; }
+  if(/^(open\s+spotify|abrir\s+(o\s+)?spotify)\b/.test(cmd)){ openAppOrWeb('spotify'); speak('Tentando abrir o Spotify.'); return; }
+  if(/^(open\s+steam|abrir\s+(a\s+|o\s+)?steam)\b/.test(cmd)){ openAppOrWeb('steam'); speak('Tentando abrir a Steam.'); return; }
+
+  // ---- Notes ----
+  const noteLead = /^(save\s+note|note|anote|anotar|salvar\s+nota|nova\s+nota)\b[:\s]*/;
+  if(noteLead.test(cmd)){
+    const text = cmd.replace(noteLead, '').trim() || original;
+    addNote(text);
+    speak(pick(['Nota salva.', 'Anotado.', 'Guardei sua nota.']));
+    return;
+  }
+  if(/^(show|read|list)\s+notes?|mostrar?\s+(as\s+)?notas|ler\s+(as\s+)?notas|listar\s+notas/.test(cmd)){
+    if(!appState.notes.length){ speak('Você não tem notas ainda.'); return; }
+    const latest = [...appState.notes].sort((a,b)=>b.createdAt-a.createdAt).slice(0,3);
+    speak(`Você tem ${appState.notes.length} notas. Mais recentes: ${latest.map(n=>n.text).join('. ')}`);
+    goTo('memory');
+    return;
+  }
+  const delNoteLead = /^(delete\s+note|apagar\s+nota|deletar\s+nota|remover\s+nota)\b[:\s]*/;
+  if(delNoteLead.test(cmd)){
+    const text = cmd.replace(delNoteLead, '').trim();
+    const match = appState.notes.find(n => n.text.toLowerCase().includes(text));
+    if(match){ deleteNote(match.id); speak(pick(['Nota apagada.', 'Removida.'])); } else { speak('Não encontrei essa nota.'); }
+    return;
+  }
+
+  // ---- Tasks ----
+  const addTaskLead = /^(add\s+task|new\s+task|remind me to|adicionar\s+tarefa|nova\s+tarefa|criar\s+tarefa|me\s+lembre\s+de)\b[:\s]*/;
+  if(addTaskLead.test(cmd)){
+    let text = cmd.replace(addTaskLead, '').trim();
+    let priority = 'medium';
+    const pMatch = text.match(/\b(high|medium|low|alta|m[eé]dia|baixa)\s+prioridade\b/) || text.match(/\b(high|medium|low)\s+priority\b/);
+    if(pMatch){
+      const map = { alta:'high', média:'high', 'm\u00e9dia':'medium', baixa:'low', high:'high', medium:'medium', low:'low' };
+      priority = map[pMatch[1].toLowerCase()] || 'medium';
+      text = text.replace(pMatch[0], '').trim();
+    }
+    if(!text) text = original;
+    addTask(text, priority);
+    speak(pick([`Tarefa adicionada${priority!=='medium' ? ' com prioridade ' + (priority==='high'?'alta':'baixa') : ''}.`, 'Anotei essa tarefa pra você.', 'Feito, tarefa criada.']));
+    return;
+  }
+  const completeTaskLead = /^(complete\s+task|finish\s+task|done with task|concluir\s+tarefa|finalizar\s+tarefa|terminar\s+tarefa)\b[:\s]*/;
+  if(completeTaskLead.test(cmd)){
+    const text = cmd.replace(completeTaskLead, '').trim();
+    const match = appState.tasks.find(t => !t.done && t.text.toLowerCase().includes(text));
+    if(match){ completeTask(match.id); speak(pick(['Tarefa concluída.', 'Marcada como feita.', 'Boa, riscada da lista.'])); } else { speak('Não encontrei essa tarefa em aberto.'); }
+    return;
+  }
+  const delTaskLead = /^(delete\s+task|apagar\s+tarefa|deletar\s+tarefa|remover\s+tarefa)\b[:\s]*/;
+  if(delTaskLead.test(cmd)){
+    const text = cmd.replace(delTaskLead, '').trim();
+    const match = appState.tasks.find(t => t.text.toLowerCase().includes(text));
+    if(match){ deleteTask(match.id); speak(pick(['Tarefa apagada.', 'Removida.'])); } else { speak('Não encontrei essa tarefa.'); }
+    return;
+  }
+  if(/^(show|list)\s+tasks?|mostrar?\s+(as\s+)?tarefas|listar\s+tarefas/.test(cmd)){
+    const open = appState.tasks.filter(t=>!t.done);
+    speak(open.length ? `Você tem ${open.length} tarefas em aberto. Prioridade máxima: ${open[0].text}` : 'Você não tem tarefas em aberto.');
+    goTo('tasks');
+    return;
+  }
+  if(/^(help|what can you do|ajuda|o que voc[eê] (pode|consegue) fazer)/.test(cmd)){
+    speak('Você pode dizer: nota, adicionar tarefa, mostrar notas, mostrar tarefas, abrir YouTube, tocar algo no YouTube, pesquisar algo no Google, fechar aba, abrir Gmail, abrir Google Drive, abrir Discord, ou abrir Roblox.');
+    return;
+  }
+  speak(pick(["Não entendi esse comando. Tente dizer nota, adicionar tarefa, abrir YouTube, ou pesquisar algo no Google.", "Não peguei isso direito. Pode repetir de outro jeito?"]));
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+refreshAllUI();
+applySettingsToUI();
+refreshHomeStatus();
+setInterval(() => { if(isDirty) saveMemory(); }, 5000);
+</script>
+</body>
+</html>
